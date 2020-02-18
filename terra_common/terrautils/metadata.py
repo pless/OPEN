@@ -3,15 +3,21 @@
 This module provides useful reference methods for accessing and cleaning TERRA-REF metadata.
 """
 
-import terrautils.lemnatec
+import json
+import os
 
-def clean_metadata(json, sensorId, fixed=False):
+import pyclowder.datasets
+import lemnatec
+from sensors import Sensors
+
+
+def clean_metadata(json, sensorId):
     """ Given a metadata object, returns a cleaned object with standardized structure 
         and names.
     """
     cleaned = clean_json_keys(json)
     if 'lemnatec_measurement_metadata' in json.keys():
-        cleaned = terrautils.lemnatec.clean(cleaned, sensorId, fixed=fixed)
+        cleaned = lemnatec.clean(cleaned, sensorId)
     else:
         return None
 
@@ -32,7 +38,6 @@ def clean_json_keys(jsonobj):
             clean_json[key.replace(".","_")] = jsonobj[key]
 
     return clean_json
-
 
 def calculate_scan_time(metadata):
     """Parse scan time from metadata.
@@ -72,8 +77,7 @@ def get_terraref_metadata(clowder_md, sensor_id=None, station='ua-mac'):
 
     # Add sensor fixed metadata
     if sensor_id:
-        query_date = get_date_from_cleaned_metadata(terra_md)
-        sensor_fixed = get_sensor_fixed_metadata(sensor_id, query_date)
+        sensor_fixed = get_sensor_fixed_metadata(station, sensor_id)
         if 'sensor_fixed_metadata' in terra_md:
             sensor_fixed['url'] = terra_md['sensor_fixed_metadata']['url']
         terra_md['sensor_fixed_metadata'] = sensor_fixed
@@ -81,113 +85,15 @@ def get_terraref_metadata(clowder_md, sensor_id=None, station='ua-mac'):
     return terra_md
 
 
-def get_extractor_metadata(clowder_md, extractor_name, extractor_version=None):
-    """Crawl Clowder metadata object for particular extractor metadata and return if found.
-
-    If extractor_version specified, returned metadata must match."""
+def get_extractor_metadata(clowder_md, extractor_name):
+    """Crawl Clowder metadata object for particular extractor metadata and return if found."""
     for sub_metadata in clowder_md:
         if 'agent' in sub_metadata:
-            agent_data = sub_metadata['agent']
-            if 'name' in agent_data and agent_data['name'].find(extractor_name) > -1:
-                if not extractor_version:
-                    return sub_metadata['content']
-                else:
-                    # TODO: Eventually check this in preferred way
-                    if 'extractor_version' in sub_metadata['content']:
-                        existing_ver = str(sub_metadata['content']['extractor_version'])
-                        if existing_ver == extractor_version:
-                            return sub_metadata['content']
+            sub_md = sub_metadata['agent']
+            if 'name' in sub_md and sub_md['name'].find(extractor_name) > -1:
+                return sub_md
 
     return None
-
-
-# pylint: disable=too-many-branches
-def pipeline_get_metadata(metadata):
-    """Look through the metadata looking for pipeline configuration
-    Args:
-        metadata(JSON): the JSON object, or list of JSON objects, to search
-    Returns:
-        The found JSON is returned, otherwise None is returned. None is also returned
-        if the passed in JSON is invalid or is empty.
-    Notes:
-        If the metadata parameter is an a list, it will be iterated over and each list element
-        inspected for pipeline data. The first found instance is returned.
-        If the metadata parameter is not a list, it's inspected to see if it contains
-        pipeline data, and that's returned if found.
-
-        There are two keys looked for off the JSON passed in, as follows, in order:
-            1) "content" -> "pipeline"
-            2) "pipeline"
-    """
-    found_metadata = None
-
-    # Check the parameter
-    if not metadata:
-        return found_metadata
-
-    json_len = len(metadata)
-    if json_len <= 0:
-        return found_metadata
-
-    try:
-        # Look for a list of JSON
-        if isinstance(metadata, list):
-            for one_metadata in metadata:
-                if 'content' in one_metadata:
-                    if 'pipeline' in one_metadata['content']:
-                        found_metadata = one_metadata['content']['pipeline']
-                        break
-
-            if found_metadata is None:
-                for one_metadata in metadata:
-                    if 'pipeline' in one_metadata:
-                        found_metadata = one_metadata['pipeline']
-                        break
-
-        elif 'content' in metadata:
-            if 'pipeline' in metadata['content']:
-                found_metadata = one_metadata['content']['pipeline']
-
-        elif 'pipeline' in metadata:
-            found_metadata = metadata['pipeline']
-    finally:
-        pass
-
-    return found_metadata
-
-
-def get_season_and_experiment(timestamp, sensor, terra_md_full):
-    """Attempts to extract season & experiment from TERRA-REF metadata given timestamp.
-
-    If the values weren't in TERRA metadata but were fetched from BETY, updated experiment will be
-    returned as well.
-    """
-    season_name, experiment_name, expmd = "Unknown Season", "Unknown Experiment", None
-    if 'experiment_metadata' in terra_md_full and len(terra_md_full['experiment_metadata']) > 0:
-        for experiment in terra_md_full['experiment_metadata']:
-            if 'name' in experiment:
-                if ":" in experiment['name']:
-                    season_name = experiment['name'].split(": ")[0]
-                    experiment_name = experiment['name'].split(": ")[1]
-                else:
-                    experiment_name = experiment['name']
-                    season_name = None
-                break
-    else:
-        # Try to determine experiment data dynamically
-        expmd = terrautils.lemnatec._get_experiment_metadata(timestamp.split("__")[0], sensor)
-        if len(expmd) > 0:
-            for experiment in expmd:
-                if 'name' in experiment:
-                    if ":" in experiment['name']:
-                        season_name = experiment['name'].split(": ")[0]
-                        experiment_name = experiment['name'].split(": ")[1]
-                    else:
-                        experiment_name = experiment['name']
-                        season_name = None
-                    break
-
-    return (season_name, experiment_name, expmd)
 
 
 def get_preferred_synonym(variable):
@@ -195,17 +101,34 @@ def get_preferred_synonym(variable):
     pass
 
 
-def get_sensor_fixed_metadata(sensor_id, query_date):
+def get_sensor_fixed_metadata(station, sensor_id, host='', key=''):
     """Get fixed sensor metadata from Clowder."""
-    return terrautils.lemnatec._get_sensor_fixed_metadata(sensor_id, query_date)
+    if not host:
+        host = os.getenv("CLOWDER_HOST", 'https://terraref.ncsa.illinois.edu/clowder/')
+    if not key:
+        key = os.getenv("CLOWDER_KEY", '')
+
+    sensor = Sensors(base="", station=station, sensor=sensor_id)
+    datasetid = sensor.get_fixed_datasetid_for_sensor()
+    jsonld = pyclowder.datasets.download_metadata(None, host, key, datasetid)
+
+    for sub_metadata in jsonld:
+        if 'content' in sub_metadata:
+            # TODO: Currently assumes only one metadata object attached to formal sensor metadata dataset
+            return sub_metadata['content']
 
 
-def get_date_from_cleaned_metadata(md):
-    default = "2012-01-01"
-    if "gantry_variable_metadata" in md:
-        if "date" in md["gantry_variable_metadata"]:
-            return md["gantry_variable_metadata"]["date"]
-        else:
-            return default
-    else:
-        return default
+if __name__ == "__main__":
+    # TODO: Either formalize these tests a bit or remove
+    sensorId="stereoTop"
+    fixed = get_sensor_fixed_metadata("ua-mac", sensorId)
+    print "\nFIXED METADATA"
+    print json.dumps(fixed, indent=4, sort_keys=True)
+
+    print "\nCLEANED METADATA"
+    
+    #with open("/data/terraref/sites/ua-mac/raw_data/VNIR/2017-05-13/2017-05-13__12-29-21-202/cd2a45b6-4922-48b4-bc29-f2f95e6206ec_metadata.json") as file:
+    with open("/data/terraref/sites/ua-mac/raw_data/stereoTop/2017-07-30/2017-07-30__14-26-11-139/6ba6f62b-3502-4c80-b3ce-db611ea9cf13_metadata.json") as file:
+        json_data = json.load(file)
+    cleaned = clean_metadata(json_data, sensorId)
+    print json.dumps(cleaned, indent=4, sort_keys=True)
