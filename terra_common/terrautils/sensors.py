@@ -56,7 +56,6 @@ STATIONS = {
 
     'ua-mac': {
         'co2Sensor': {
-            "fixed_metadata_json": "/sensors/co2sensor/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a9924f0cad7d8131b648",
             'template': '{base}/{station}/raw_data/' + \
                         '{sensor}/{date}/{timestamp}/{filename}',
@@ -66,7 +65,6 @@ STATIONS = {
         },
         
         'stereoTop': {
-            "fixed_metadata_json": "/sensors/stereo/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a8ae4f0cad7d8131ac0e",
             'template': '{base}/{station}/raw_data/' + \
                         '{sensor}/{date}/{timestamp}/{filename}',
@@ -75,7 +73,6 @@ STATIONS = {
         },
         
         'flirIrCamera': {
-            "fixed_metadata_json": "/sensors/flirIrCamera/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a7184f0cad7d8131994a",
             'template': '{base}/{station}/raw_data/' + \
                         '{sensor}/{date}/{timestamp}/{filename}',
@@ -83,12 +80,10 @@ STATIONS = {
         },
         
         "cropCircle": {
-            "fixed_metadata_json": "/sensors/cropCircle/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a7ed4f0cad7d8131a2e7"
         },
         
         "irrigation": {
-            "fixed_metadata_json": "/sensors/weatherStation/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "TBD",
             "geostream": ""
         },
@@ -101,78 +96,54 @@ STATIONS = {
         },
         
         "lightning": {
-            "fixed_metadata_json": "/sensors/weatherStation/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "TBD",
             "geostream": ""
         },
         
         "ndviSensor": {
-            "fixed_metadata_json": "/sensors/ndviSensor/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a8f64f0cad7d8131af54"
         },
         
         "parSensor": {
-            "fixed_metadata_json": "/sensors/parSensor/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a8ce4f0cad7d8131ad86"
         },
         
         "priSensor": {
-            "fixed_metadata_json": "/sensors/priSensor/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a9174f0cad7d8131b09a"
         },
         
         "ps2Top": {
-            "fixed_metadata_json": "/sensors/ps2/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a84b4f0cad7d8131a73d"
         },
         
         "scanner3DTop": {
-            "fixed_metadata_json": "/sensors/scanner3D/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a7444f0cad7d81319b2b",
             'template': '{base}/{station}/Level_1/' + \
-                        'laser3d_las/{date}/{timestamp}/{filename}',
+                        '{sensor}/{date}/{timestamp}/{filename}',
             'pattern': 'hashid__Top-heading-{opts}_0.ply'
         },
         
         "SWIR": {
-            "fixed_metadata_json": "/sensors/SWIR/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a79e4f0cad7d81319f5f"
         },
         
         "VNIR": {
-            "fixed_metadata_json": "/sensors/VNIR/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "5873a7bb4f0cad7d8131a0b7"
         },
         
         "weather": {
-            "fixed_metadata_json": "/sensors/weatherStation/sensor_fixed_metadata.json",
             "fixed_metadata_datasetid": "TBD"
         },
       
         "scanalyzer": {
-            "fixed_metadata_json": "/sensors/scanalyzer/sensor_fixed_metadata.json",
-            "fixed_metadata_datasetid": "5873eac64f0cad7d81349b0b"
+              "fixed_metadata_datasetid": "5873eac64f0cad7d81349b0b"
         },
 
-        'rgb_fullfield': {
+        'fullfield': {
             'display': 'Full Field Stitched Mosaics',
-            'template': '{base}/{station}/Level_2/' + \
+            'template': '{base}/{station}/Level_1/' + \
                         '{sensor}/{date}/{filename}',
-            'pattern': '{sensor}_L2_{station}_{date}{opts}.tif'
-        },
-
-        'ir_fullfield': {
-            'display': 'Full Field Stitched Mosaics',
-            'template': '{base}/{station}/Level_2/' + \
-                        '{sensor}/{date}/{filename}',
-            'pattern': '{sensor}_L2_{station}_{date}{opts}.tif'
-        },
-
-        'laser3d_fullfield': {
-            'display': 'Full Field Stitched Mosaics',
-            'template': '{base}/{station}/Level_2/' + \
-                        '{sensor}/{date}/{filename}',
-            'pattern': '{sensor}_L2_{station}_{date}{opts}.tif'
+            'pattern': '{sensor}_L1_{station}_{date}{opts}.tif'
         },
 
         'vnir_netcdf': {
@@ -189,24 +160,9 @@ STATIONS = {
             'display': 'SWIR Hyperspectral NetCDFs',
             'template': '{base}/{station}/Level_1/' + \
                         '{sensor}/{date}/{timestamp}/{filename}',
-            'pattern': '{sensor}_L1_{station}_{timestamp}{opts}.nc'
-        },
-
-        'vnir_traits': {
-            'template': '{base}/{station}/Level_3/' + \
-                        '{sensor}/{date}/{filename}',
-            'pattern': '{sensor}_L3_{station}_{date}{opts}.csv',
-            'bety_traits': {
-                'NDVI705': 'NDVI705'
-            }
-        },
-
-        'swir_traits': {
-            'template': '{base}/{station}/Level_3/' + \
-                        '{sensor}/{date}/{filename}',
-            'pattern': '{sensor}_L3_{station}_{date}{opts}.csv',
-            'bety_traits': {
-                'NDVI705': 'NDVI705'
+            'pattern': '{sensor}_L1_{station}_{timestamp}{opts}.nc',
+            "bety_traits": {
+                "NDVI705": "NDVI705"
             }
         },
 
@@ -217,42 +173,21 @@ STATIONS = {
             'pattern': '{sensor}_L1_{station}_{timestamp}{opts}.tif',
         },
 
-        'rgb_nrmac': {
-            'display': 'RGB GeoTIFFs (NRMAC Quality Score)',
-            'template': '{base}/{station}/Level_2/' + \
-                        '{sensor}/{date}/{timestamp}/{filename}',
-            'pattern': '{sensor}_L2_{station}_{timestamp}{opts}_nrmac.tif',
-        },
-
-        'rgb_enhanced': {
-            'display': 'RGB GeoTIFFs (Enhanced)',
-            'template': '{base}/{station}/Level_2/' + \
-                        '{sensor}/{date}/{timestamp}/{filename}',
-            'pattern': '{sensor}_L2_{station}_{timestamp}{opts}_enhanced.tif',
-        },
-
-        'rgb_mask': {
-            'display': 'RGB GeoTIFFs (Masked)',
-            'template': '{base}/{station}/Level_2/' + \
-                        '{sensor}/{date}/{timestamp}/{filename}',
-            'pattern': '{sensor}_L2_{station}_{timestamp}{opts}_mask.tif',
-        },
-
-        'rgb_canopycover': {
-            'template': '{base}/{station}/Level_3/' + \
+        'rgb_canopyCover': {
+            'template': '{base}/{station}/Level_1/' + \
                         '{sensor}/{date}/{filename}',
-            'pattern': '{sensor}_L3_{station}_{date}{opts}.csv',
+            'pattern': '{sensor}_L2_{station}_{date}{opts}.csv',
             'bety_traits': {
                 'canopy_cover': 'canopy_cover'
             },
             "url": ""
         },
 
-        'rgb_textureanalysis': {
+        'texture_analysis': {
             'display': 'RGB Texture Analysis',
-            'template': '{base}/{station}/Level_3/' + \
+            'template': '{base}/{station}/Level_1/' + \
                         '{sensor}/{date}/{timestamp}/{filename}',
-            'pattern': '{sensor}_L3_{station}_{timestamp}{opts}.csv',
+            'pattern': '{sensor}_L1_{station}_{timestamp}{opts}.csv',
         },
 
         'ir_geotiff': {
@@ -271,9 +206,9 @@ STATIONS = {
 
         'ps2_fluorescence': {
             'display': 'PSII Fluorescence Features',
-            'template': '{base}/{station}/Level_2/' + \
+            'template': '{base}/{station}/Level_1/' + \
                         '{sensor}/{date}/{timestamp}/{filename}',
-            'pattern': '{sensor}_L2_{station}_{timestamp}{opts}.png',
+            'pattern': '{sensor}_L1_{station}_{timestamp}{opts}.png',
         },
 
         'spectral_index_csvs': {
@@ -304,7 +239,7 @@ STATIONS = {
             'pattern': 'SWIR_L2_{station}_{timestamp}{opts}.nc'
         },
 
-        'laser3d_las': {
+        'laser3d_mergedlas': {
             'display': 'Laser Scanner 3D LAS',
             'template': '{base}/{station}/Level_1/' + \
                         '{sensor}/{date}/{timestamp}/{filename}',
@@ -312,15 +247,17 @@ STATIONS = {
                        '_merged{opts}.las'
         },
 
-        'laser3d_canopyheight': {
-            'display': 'Laser Scanner 3D Canopy Height',
-            'template': '{base}/{station}/Level_3/' + \
-                        '{sensor}/{date}/{plot}/{filename}'
+        'laser3d_plant_height': {
+            'display': 'Laser Scanner 3D Plant Height',
+            'template': '{base}/{station}/Level_1/' + \
+                        '{sensor}/{date}/{timestamp}/{filename}',
+            'pattern': 'scanner3DTop_L1_{station}_{timestamp}' + \
+                       '_height{opts}.tif'
         },
 
         'laser3d_heightmap': {
             'display': 'Digital Surface Model GeoTiffs',
-            'template': '{base}/{station}/Level_2/' + \
+            'template': '{base}/{station}/Level_1/' + \
                         '{sensor}/{date}/{timestamp}/{filename}',
             'pattern': 'scanner3DTop_L2_{station}_{timestamp}' + \
                        '_heightmap{opts}.tif'
@@ -347,21 +284,15 @@ STATIONS = {
             'pattern': '{sensor}_L2_{station}_{timestamp}{opts}.tif'
         },
 
-        'ir_meantemp': {
-            'template': '{base}/{station}/Level_3/' + \
+        'ir_meanTemp': {
+            'template': '{base}/{station}/Level_1/' + \
                         '{sensor}/{date}/{filename}',
-            'pattern': '{sensor}_L3_{station}_{date}{opts}.csv',
+            'pattern': '{sensor}_L2_{station}_{date}{opts}.csv',
             'bety_traits': {
                 'surface_temperature': 'surface_temperature'
             },
-        },
-
-        'plotclipper': {
-            'display': 'Plot Clipper',
-            'template': '{base}/{station}/Level_1_Plots/' + \
-                        '{subsensor}/{date}/{plot}/{filename}'
         }
-    }
+    },
 }
 
 
@@ -429,7 +360,7 @@ class Sensors():
 
 
     def get_sensor_path(self, timestamp, sensor='', filename='',
-                        opts=None, ext='', plot='', subsensor=''):
+                        opts=None, ext=''):
         """Get the appropritate path for writing sensor data
 
         Args:
@@ -477,14 +408,13 @@ class Sensors():
 
         # pattern should be completed with regex string using format
         if filename:
-            if 'pattern' in s:
-                pattern = exact_p(s['pattern']).format(sensor='\D*',
-                        station='\D*', date=date_p, time=full_time_p,
-                        timestamp=full_date_p, opts='\D*')
+            pattern = exact_p(s['pattern']).format(sensor='\D*',
+                    station='\D*', date=date_p, time=full_time_p,
+                    timestamp=full_date_p, opts='\D*')
 
-                result = re.match(pattern, filename)
-                if result == None:
-                    raise RuntimeError('The filename given does not match the correct pattern')
+            result = re.match(pattern, filename)
+            if result == None:
+                raise RuntimeError('The filename given does not match the correct pattern')
 
         else:
             filename = s['pattern'].format(station=self.station,
@@ -498,7 +428,7 @@ class Sensors():
 
         path = s['template'].format(base=self.base, station=self.station,
                                     sensor=sensor, timestamp=timestamp,
-                                    date=date, time=hms, filename=filename, plot=plot, subsensor=subsensor)
+                                    date=date, time=hms, filename=filename)
         return path
 
 
@@ -541,7 +471,7 @@ class Sensors():
         return self.get_sensor_path(time, sensor=sensor, opts=opts, ext=ext)
 
 
-    def get_fixed_jsonpath_for_sensor(self, site=None, sensor=None):
+    def get_fixed_datasetid_for_sensor(self, site=None, sensor=None):
         """Return the Clowder dataset ID for the fixed sensor information"""
 
         if not site:
@@ -549,11 +479,11 @@ class Sensors():
         if not sensor:
             sensor = self.sensor
 
-        return self.stations[site][sensor]['fixed_metadata_json']
+        return self.stations[site][sensor]['fixed_metadata_datasetid']
 
 
     def create_sensor_path(self, timestamp, sensor='', filename='',
-                        opts=None, ext='', plot='', subsensor=''):
+                        opts=None, ext=''):
         """Return the full path for the sensor data
         
         Note: this function is similar to get_sensor_path and takes
@@ -562,14 +492,10 @@ class Sensors():
         """
 
         path = self.get_sensor_path(timestamp, sensor, filename,
-                                        opts, ext, plot, subsensor)
+                                        opts, ext)
         dirs = os.path.dirname(path) 
         if not os.path.exists(dirs):
-            try:
-                os.makedirs(dirs)
-            except:
-                # If another extractor created the dir structure in meantime, we can continue
-                pass
+            os.makedirs(dirs)
 
         return path
 
@@ -623,12 +549,6 @@ class Sensors():
         """Get display name for a sensor."""
 
         if sensor:
-            if 'display' in self.stations[self.station][sensor]:
-                return self.stations[self.station][sensor]['display']
-            else:
-                return sensor
+            return self.stations[self.station][sensor]['display']
         else:
-            if 'display' in self.stations[self.station][self.sensor]:
-                return self.stations[self.station][self.sensor]['display']
-            else:
-                return self.sensor
+            return self.stations[self.station][self.sensor]['display']
