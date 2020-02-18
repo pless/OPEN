@@ -6,7 +6,7 @@ Created on Sep 6, 2016
 import json, sys, utm
 import numpy as np
 from math import cos, pi
-from terrautils.betydb import get_site_boundaries
+from .terrautils.betydb import get_site_boundaries
 
 # Scanalyzer -> MAC formular @ https://terraref.gitbooks.io/terraref-documentation/content/user/geospatial-information.html
 # Mx = ax + bx * Gx + cx * Gy
