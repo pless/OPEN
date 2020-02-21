@@ -1,0 +1,166 @@
+#! /usr/bin/env python
+import pickle
+import os
+import glob
+import sys
+import logging
+import argparse
+from terra_common import CoordinateConverter as CC
+import crop
+from multiprocessing import Pool
+from datetime import datetime
+from tqdm import tqdm
+from functools import wraps
+os.environ['BETYDB_KEY'] = '9999999999999999999999999999999999999999'
+
+def unpack(func):
+    @wraps(func)
+    def wrapper(arg_tuple):
+        return func(*arg_tuple)
+    return wrapper
+
+@unpack
+def stereo_singe_image_process(*args, **kwargs):
+        crop.stereo.singe_image_process(*args, **kwargs)
+
+def stereo_crop():
+    logger = logging.getLogger('stereo_crop_ppln_main')
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s: \t%(message)s')
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    logger.info('\n\t raw data path: {}'
+                '\n\t output path: {} '
+                '\n\t start date: {}'
+                '\n\t end date: {}'
+                '\n\t number of processes: {}'
+                .format(args.raw_path, args.out_path, args.start, args.end, args.processes))
+    # TODO load a cc and dump to some where for cache
+    cc = CC()
+    cc.bety_query(args.start, useSubplot=False)
+    start_date = datetime.strptime(args.start, '%Y-%m-%d')
+    end_date = datetime.strptime(args.end, '%Y-%m-%d')
+
+    # TODO check folder existence
+    if not os.path.isdir(args.lv1_path):
+        os.makedirs(args.lv1_path)
+    if not os.path.isdir(args.out_path):
+        os.makedirs(args.out_path)
+    logger.info('scanning folders')
+    task_list = []
+    result_json_file_list = glob.glob(os.path.join(args.out_path, '**', '*.json'))
+    timestamp_set = set([os.path.splitext(os.path.basename(f))[0] for f in result_json_file_list])
+    total_task_count = 0
+    skipped_count = 0
+    for date_folder in os.listdir(args.raw_path):
+        folder_date = datetime.strptime(date_folder, '%Y-%m-%d')
+        if folder_date < start_date or folder_date > end_date:
+            continue
+        raw_date_folder_path = os.path.join(args.raw_path, date_folder)
+        for sub_folder in os.listdir(raw_date_folder_path):
+            total_task_count += 1
+            # task format: raw_data_folder, ply_data_folder, output_folder,
+            #              sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.DEBUG):
+            if sub_folder in timestamp_set:
+                skipped_count += 1
+                continue
+            task_raw_path = os.path.join(raw_date_folder_path, sub_folder)
+            task = (task_raw_path, args.lv1_path, args.out_path, cc)
+            task_list.append(task)
+    logger.info('total task: {}'.format(total_task_count))
+    if skipped_count != 0:
+        logger.info('task skipped: {}'.format(skipped_count))
+    pool = Pool(processes=args.processes)
+    #for _ in pool.imap_unordered(singe_image_process, task_list):
+    #    pass
+    for _ in tqdm(pool.imap_unordered(stereo_singe_image_process, task_list), total=total_task_count, initial=skipped_count):
+        pass
+
+@unpack
+def scanner3d_singe_image_process(*args, **kwargs):
+        crop.scanner3d.scanner3d_single_crop(*args, **kwargs)
+
+def scanner3d_crop():
+    logger = logging.getLogger('scanner3d_crop_ppln_main')
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s: \t%(message)s')
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    logger.info('\n\t raw data path: {}'
+                '\n\t ply data path: {} '
+                '\n\t start date: {}'
+                '\n\t end date: {}'
+                '\n\t number of processes: {}'
+                .format(args.raw_path, args.ply_path, args.start, args.end, args.processes))
+    # TODO load a cc and dump to some where
+    cc = CC()
+    cc.bety_query(args.start, useSubplot=False)
+    start_date = datetime.strptime(args.start, '%Y-%m-%d')
+    end_date = datetime.strptime(args.end, '%Y-%m-%d')
+
+    if not os.path.isdir(args.out_path):
+        os.makedirs(args.out_path)
+    logger.info('scanning folders')
+    task_list = []
+    if args.task_list is None:
+        for date_folder in os.listdir(args.raw_path):
+            folder_date = datetime.strptime(date_folder, '%Y-%m-%d')
+            if folder_date < start_date or folder_date > end_date:
+                continue
+            raw_date_folder_path = os.path.join(args.raw_path, date_folder)
+            ply_date_folder_path = os.path.join(args.ply_path, date_folder)
+            for sub_folder in os.listdir(raw_date_folder_path):
+                # task format: raw_data_folder, ply_data_folder, output_folder,
+                #              sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.DEBUG):
+                task_raw_path = os.path.join(raw_date_folder_path, sub_folder)
+                task_ply_path = os.path.join(ply_date_folder_path, sub_folder)
+                task = (task_raw_path, task_ply_path, args.out_path, cc)
+                task_list.append(task)
+    else:
+        with open(args.task_list) as f:
+            task_timestamp_list = f.read().splitlines()
+            for task_timestamp in task_timestamp_list:
+                task_date = task_timestamp.split('__')[0]
+                task_raw_path = os.path.join(args.raw_path, task_date, task_timestamp)
+                task_ply_path = os.path.join(args.ply_path, task_date, task_timestamp)
+                task = (task_raw_path, task_ply_path, args.out_path, cc)
+                task_list.append(task)
+
+    total_tasks = len(task_list)
+    logger.info('total task: {}'.format(total_tasks))
+    pool = Pool(processes=args.processes)
+    count = 0
+    for _ in tqdm(pool.imap_unordered(scanner3d_singe_image_process, task_list), total=total_tasks, miniters=args.processes):
+        pass
+
+def parse_args():
+    # TODO add arg for globus refresh token
+    description = 'usage '
+    parser = argparse.ArgumentParser(description=description)
+    subparsers = parser.add_subparsers(help='select types of sensor that going to crop')
+
+    parser_stereo = subparsers.add_parser('stereo', help='stereoTop')
+    parser_stereo.add_argument('--raw-path', help='path to the root of raw data', required=True)
+    parser_stereo.add_argument('--lv1-path', help='path to the Level 1 data (out_dir)', required=True)
+    parser_stereo.add_argument('--out-path', help='path to the output folder (plot_dir)', required=True)
+    parser_stereo.set_defaults(crop_func=stereo_crop)
+
+    parser_scanner3d = subparsers.add_parser('scanner3d', help='scanner3DTop')
+    parser_scanner3d.add_argument('--raw-path', help='path to the root of raw data', required=True)
+    parser_scanner3d.add_argument('--ply-path', help='path to the root of ply data', required=True)
+    parser_scanner3d.add_argument('--out-path', help='path to the output folder (plot_dir)', required=True)
+    parser_scanner3d.set_defaults(crop_func=scanner3d_crop)
+
+    parser.add_argument('--start', metavar='yyyy-mm-dd', help='Start date. Format: yyyy-mm-dd', required=True)
+    parser.add_argument('--end', metavar='yyyy-mm-dd', help='End date. Format: yyyy-mm-dd', required=True)
+    parser.add_argument('-p', '--processes', help='number of sub-processes', default=4, type=int)
+
+    args = parser.parse_args()
+    return args
+
+args = parse_args()
+args.crop_func()
