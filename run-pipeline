@@ -19,11 +19,12 @@ def unpack(func):
         return func(*arg_tuple)
     return wrapper
 
-def stereo_crop():
-    @unpack
-    def singe_image_process(*args, **kwargs):
+@unpack
+def stereo_singe_image_process(*args, **kwargs):
         crop.stereo.singe_image_process(*args, **kwargs)
-    logger = logging.getLogger('scan_crop_ppln_main')
+
+def stereo_crop():
+    logger = logging.getLogger('stereo_crop_ppln_main')
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s: \t%(message)s')
     ch = logging.StreamHandler()
@@ -74,14 +75,15 @@ def stereo_crop():
     pool = Pool(processes=args.processes)
     #for _ in pool.imap_unordered(singe_image_process, task_list):
     #    pass
-    for _ in tqdm(pool.imap_unordered(singe_image_process, task_list), total=total_task_count, initial=skipped_count):
+    for _ in tqdm(pool.imap_unordered(stereo_singe_image_process, task_list), total=total_task_count, initial=skipped_count):
         pass
 
-def scanner3d_crop():
-    @unpack
-    def singe_image_process(*args, **kwargs):
+@unpack
+def scanner3d_singe_image_process(*args, **kwargs):
         crop.scanner3d.scanner3d_single_crop(*args, **kwargs)
-    logger = logging.getLogger('scan_crop_ppln_main')
+
+def scanner3d_crop():
+    logger = logging.getLogger('scanner3d_crop_ppln_main')
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s: \t%(message)s')
     ch = logging.StreamHandler()
@@ -132,7 +134,7 @@ def scanner3d_crop():
     logger.info('total task: {}'.format(total_tasks))
     pool = Pool(processes=args.processes)
     count = 0
-    for _ in tqdm(pool.imap_unordered(singe_image_process, task_list), total=total_tasks, miniters=args.processes):
+    for _ in tqdm(pool.imap_unordered(scanner3d_singe_image_process, task_list), total=total_tasks, miniters=args.processes):
         pass
 
 def parse_args():
@@ -151,11 +153,11 @@ def parse_args():
     parser_scanner3d.add_argument('--raw-path', help='path to the root of raw data', required=True)
     parser_scanner3d.add_argument('--ply-path', help='path to the root of ply data', required=True)
     parser_scanner3d.add_argument('--out-path', help='path to the output folder (plot_dir)', required=True)
+    parser_scanner3d.set_defaults(crop_func=scanner3d_crop)
 
     parser.add_argument('--start', metavar='yyyy-mm-dd', help='Start date. Format: yyyy-mm-dd', required=True)
     parser.add_argument('--end', metavar='yyyy-mm-dd', help='End date. Format: yyyy-mm-dd', required=True)
     parser.add_argument('-p', '--processes', help='number of sub-processes', default=4, type=int)
-    parser_stereo.set_defaults(crop_func=scanner3d_crop)
 
     args = parser.parse_args()
     return args
