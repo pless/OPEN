@@ -478,6 +478,7 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
         os.mkdir(s_d)
         
     dst_img_path = os.path.join(s_d, '{}.png'.format(time_stamp))
+    roi_img = cv2.cvtColor(roi_img, cv2.COLOR_BGR2RGB)
     cv2.imwrite(dst_img_path, roi_img)
     #Image.fromarray(roi_img).save(dst_img_path)
     
@@ -623,6 +624,9 @@ def full_season_crop_rgb(raw_rgb_dir, out_dir, plot_dir, start_date, end_date):
         
         out_path = os.path.join(out_dir, str_date)
         
+        if not os.path.isdir(raw_path):
+            continue
+        
         #crop_rgb_imageToPlot(raw_path, out_path, plot_dir, convt)
         full_day_multi_process(raw_path, out_path, plot_dir, convt)
     
@@ -634,10 +638,10 @@ def main():
     
     args = options()
     
-    #full_season_crop_rgb('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/raw_data/stereoTop',
-    #                      '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_1/stereoTop',
-    #                       '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/stereoTop', start_date, end_date)
-    full_season_crop_rgb(args.in_dir, args.out_dir, args.plot_dir, start_date, end_date)
+    full_season_crop_rgb('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/raw_data/stereoTop',
+                          '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_1/stereoTop',
+                           '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/stereoTop', start_date, end_date)
+    #full_season_crop_rgb(args.in_dir, args.out_dir, args.plot_dir, start_date, end_date)
 
 
 
