@@ -254,6 +254,7 @@ def metadata_to_imageBoundaries(center_position, fov, image_shape, convt):
     row_a, col_a = convt.fieldPosition_to_fieldPartition(x_a, y_a)   # A range/column
     row_b, col_b = convt.fieldPosition_to_fieldPartition(x_b, y_b)   # B range/column
     if 0 in [row_a, row_b, col_a, col_b]:
+        print('row in the gap')
         return None, None, None
     
     if row_a == row_b and col_a == col_b:
@@ -423,8 +424,8 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     
     base_name = os.path.basename(ims_left[0])[:-4]
     out_path = os.path.join(out_dir, '{}.png'.format(base_name))
-    if os.path.isfile(out_path):
-        return
+    #if os.path.isfile(out_path):
+    #    return
     
     # parse meta data
     metadata = lower_keys(load_json(os.path.join(in_dir, metas[0])))
@@ -442,29 +443,32 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     
     # center position/fov/imgSize to plot number, image boundaries, only dominated plot for now
     try:
-        plotNum, roiBox, field_roiBox = metadata_to_imageBoundaries_with_gaps(center_position, fov, image_shape, convt)
+        plotNum, roiBox, field_roiBox = metadata_to_imageBoundaries(center_position, fov, image_shape, convt)
     except ValueError as err:
             fail('Error metadata_to_imageBoundaries:' + in_dir)
             return
             
     if plotNum == None:
+        print(time_stamp+'plotNum could not found.\n')
         return
     plot_row, plot_col = convt.plotNum_to_fieldPartition(plotNum)
     if plotNum == 0:
         return
+
         
     # bin to image
     try:
         im = np.fromfile(join(in_dir, ims_left[0]), dtype='uint8').reshape(image_shape[::-1])
-    
-        im_color = demosaic(im)
-        im_color = (np.rot90(im_color))
-    
-        Image.fromarray(im_color).save(out_path)
     except ValueError as err:
         fail('Error bin to image: ' + err.args[0])
         print(in_dir)
         return
+    
+    im_color = demosaic(im)
+    im_color = (np.rot90(im_color))
+
+    Image.fromarray(im_color).save(out_path)
+
     
     # crop image
     cv_img = im_color
@@ -563,7 +567,7 @@ def stitch_plot_rgb_image(in_dir, out_dir, str_date, convt):
 
 def test():
     
-    str_date = '2018-05-24'
+    str_date = '2017-05-24'
     
     in_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/stereoTop/', str_date)
     out_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/StitchedPlotRGB', str_date)
