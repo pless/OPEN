@@ -6,7 +6,7 @@ Created on Sep 6, 2016
 import json, sys, utm
 import numpy as np
 from math import cos, pi
-from .terrautils.betydb import get_site_boundaries
+from terrautils.betydb import get_site_boundaries
 
 # Scanalyzer -> MAC formular @ https://terraref.gitbooks.io/terraref-documentation/content/user/geospatial-information.html
 # Mx = ax + bx * Gx + cx * Gy
@@ -14,8 +14,8 @@ from .terrautils.betydb import get_site_boundaries
 # Gx = ( (My/cy - ay/cy) - (Mx/cx - ax/cx) ) / (by/cy - bx/cx)
 # Gy = ( (My/by - ay/by) - (Mx/bx - ax/bx) ) / (cy/by - cx/bx)
 SE_latlon = (33.07451869,-111.97477775)
-ay, by, cy = 3659974.971, 1.0002, 0.0078
-ax, bx, cx = 409012.2032, 0.009, - 0.9986
+ay = 3659974.971; by = 1.0002; cy = 0.0078;
+ax = 409012.2032; bx = 0.009; cx = - 0.9986;
 SE_utm = utm.from_latlon(SE_latlon[0], SE_latlon[1])
 lng_shift = 0.000020308287
 lat_shift = 0.000015258894
@@ -122,7 +122,7 @@ class CoordinateConverter(object):
             cols = 16
             col = plotNum % cols
             if col == 0:
-                plot_row = plotNum / cols
+                plot_row = plotNum // cols
                 if (plot_row % 2 == 0):
                     plot_col = 1
                 else:
@@ -131,7 +131,7 @@ class CoordinateConverter(object):
                 return int(plot_row), int(plot_col)
             
             
-            plot_row = plotNum/cols +1
+            plot_row = plotNum // cols +1
             plot_col = col
             if (plot_row % 2 == 0):
                 plot_col = cols - col + 1
@@ -141,7 +141,7 @@ class CoordinateConverter(object):
             cols = 32
             col = plotNum % cols
             if col == 0:
-                plot_row = plotNum / cols
+                plot_row = plotNum // cols
                 if (plot_row % 2 == 0):
                     plot_col = 1
                 else:
@@ -150,7 +150,7 @@ class CoordinateConverter(object):
                 return int(plot_row), int(plot_col)
             
             
-            plot_row = plotNum/cols +1
+            plot_row = plotNum//cols +1
             plot_col = col
             if (plot_row % 2 == 0):
                 plot_col = cols - col + 1
@@ -260,7 +260,7 @@ class CoordinateConverter(object):
         
         self.queryStatus = True
         
-        self.add_gaps_in_np_bounds()
+        #self.add_gaps_in_np_bounds()
         
         return True
     
