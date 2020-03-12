@@ -67,7 +67,7 @@ def bin_to_png(in_dirs, out_dirs, plot_dir, convt):
             fail("\tFailed to process folder %s: %s" % (i, str(ex)))
 
 def fail(reason):
-    print >> sys.stderr, reason
+    print(reason)
 
 def lower_keys(in_dict):
     if type(in_dict) is dict:
