@@ -45,9 +45,6 @@ class CoordinateConverter(object):
         self.y_column = 0
         self.seasonNum = 0
         self.np_bounds = None   # np.zeros((54, 16, 4))
-        self.np_bounds_w_gaps = np.zeros((107, 16, 4)) # row: 54rows+53gaps, cols: 16cols no gaps
-        self.np_bounds_subplot = np.zeros((54, 32, 4))
-        self.useSubplot = False
         self.queryStatus = False
         self.plots = ''
     
@@ -57,61 +54,22 @@ class CoordinateConverter(object):
         plot_col = 0
         if not self.queryStatus:
             return plot_row, plot_col
-        
-        if self.useSubplot:
-            for i in range(54):
-                xmin = self.np_bounds_subplot[i][0][0]
-                xmax = self.np_bounds_subplot[i][0][1]
-                if (x > xmin) and (x <= xmax):
-                    plot_row = i + 1
-                    break
-                    
-            for j in range(32):
-                ymin = self.np_bounds_subplot[plot_row-1][j][2]
-                ymax = self.np_bounds_subplot[plot_row-1][j][3]
-                if (y > ymin) and (y <= ymax):
-                    plot_col = j + 1
-                    break
-        else:
-            for i in range(54):
-                xmin = self.np_bounds[i][0][0]
-                xmax = self.np_bounds[i][0][1]
-                if (x > xmin) and (x <= xmax):
-                    plot_row = i + 1
-                    break
-                    
-            for j in range(16):
-                ymin = self.np_bounds[plot_row-1][j][2]
-                ymax = self.np_bounds[plot_row-1][j][3]
-                if (y > ymin) and (y <= ymax):
-                    plot_col = j + 1
-                    break
-        
-        return int(plot_row), int(plot_col)
-    
-    def fieldPosition_to_fieldPartition_w_gaps(self, x, y):
-        
-        plot_row = 0
-        plot_col = 0
-        if not self.queryStatus:
-            return plot_row, plot_col
-        
-        for i in range(107):
-            xmin = self.np_bounds_w_gaps[i][0][0]
-            xmax = self.np_bounds_w_gaps[i][0][1]
+
+        for i in range(self.max_range):
+            xmin = self.np_bounds[i][0][0]
+            xmax = self.np_bounds[i][0][1]
             if (x > xmin) and (x <= xmax):
                 plot_row = i + 1
                 break
                 
-        for j in range(16):
-            ymin = self.np_bounds_w_gaps[plot_row-1][j][2]
-            ymax = self.np_bounds_w_gaps[plot_row-1][j][3]
+        for j in range(self.max_col):
+            ymin = self.np_bounds[plot_row-1][j][2]
+            ymax = self.np_bounds[plot_row-1][j][3]
             if (y > ymin) and (y <= ymax):
                 plot_col = j + 1
                 break
         
         return int(plot_row), int(plot_col)
-    
     
     def plotNum_to_fieldPartition(self, plotNum):
         "Converts plot number to field partition"
@@ -119,46 +77,25 @@ class CoordinateConverter(object):
         plot_col = 0
         if not self.queryStatus:
             return int(plot_row), int(plot_col)
+        cols = self.max_col
+        col = plotNum % cols
+        if col == 0:
+            plot_row = plotNum // cols
+            if (plot_row % 2 == 0):
+                plot_col = 1
+            else:
+                plot_col = self.max_col
+                
+            return int(plot_row), int(plot_col)
         
-        if not self.useSubplot:
-            cols = 16
-            col = plotNum % cols
-            if col == 0:
-                plot_row = plotNum // cols
-                if (plot_row % 2 == 0):
-                    plot_col = 1
-                else:
-                    plot_col = 16
-                    
-                return int(plot_row), int(plot_col)
-            
-            
-            plot_row = plotNum // cols +1
-            plot_col = col
-            if (plot_row % 2 == 0):
-                plot_col = cols - col + 1
-            
-            return int(plot_row), int(plot_col)
-        else:
-            cols = 32
-            col = plotNum % cols
-            if col == 0:
-                plot_row = plotNum // cols
-                if (plot_row % 2 == 0):
-                    plot_col = 1
-                else:
-                    plot_col = 32
-                    
-                return int(plot_row), int(plot_col)
-            
-            
-            plot_row = plotNum//cols +1
-            plot_col = col
-            if (plot_row % 2 == 0):
-                plot_col = cols - col + 1
-            
-            return int(plot_row), int(plot_col)
-    
+        
+        plot_row = plotNum // cols +1
+        plot_col = col
+        if (plot_row % 2 == 0):
+            plot_col = cols - col + 1
+        
+        return int(plot_row), int(plot_col)
+
     def pixel_to_plotNum(self, x, y, position, fov, scan_d, x_width, y_width):
         "Converts pixel to plot number, given pixel x, y, field position, sensor field of view, scan distance, image width and height"
         
@@ -188,32 +125,16 @@ class CoordinateConverter(object):
         if not self.queryStatus:
             return 0
         
-        if self.useSubplot:
-            return self.fieldPartition_to_plotNum_32(plot_row, plot_col)
-        else:
-            if plot_row == 0:
-                return 0
-            
-            if plot_row % 2 == 0:
-                plot_col = 17 - plot_col
-                
-            plotNum = (plot_row-1)*16 + plot_col
-        
-            return int(plotNum)
-    
-    def fieldPartition_to_plotNum_32(self, plot_row, plot_col):
-        "Converts field partition to plot number"
         if plot_row == 0:
             return 0
         
         if plot_row % 2 == 0:
-            plot_col = 33 - plot_col
+            plot_col = self.max_col + 1 - plot_col
             
-        plotNum = (plot_row-1)*32 + plot_col
+        plotNum = (plot_row-1)*self.max_col + plot_col
     
-        return plotNum
-    
-    
+        return int(plotNum)
+
     def epsg_to_mac(self, latlng):
         
         Utm_lng = latlng[0] - lng_shift
@@ -241,27 +162,22 @@ class CoordinateConverter(object):
         
         return gantry_coord
     
-    def bety_query(self, str_date, useSubplot=False):
-        self.useSubplot = useSubplot
+    def bety_query(self, str_date):
         # After S10 the betydb url changed to OPEN betydb: http://128.196.65.186:8000/bety/
         if datetime.strptime(str_date, "%Y-%m-%d") >= datetime(2019, 11, 25):
             betydb.BETYDB_URL = 'http://128.196.65.186:8000/bety/'
         self.plots = get_site_boundaries(str_date, city="Maricopa")
         plot_season_range_col =  [[int(x) for x in re.findall(r'\d+', x)] for x in list(self.plots.keys())] # find numbers in plot name
         _, max_range, max_col = np.max(plot_season_range_col, axis=0)
+        self.max_range = max_range
+        self.max_col = max_col
         self.np_bounds = np.zeros((max_range, max_col, 4))
         self.parse_bety_plots()
        
-        if self.useSubplot:
-            records_num = np.count_nonzero(self.np_bounds_subplot)
-            if records_num != 1728*4:
-                self.queryStatus = False
-                return False
-        else:
-            records_num = np.count_nonzero(self.np_bounds)
-            if records_num != max_range * max_col * 4:
-                self.queryStatus = False
-                return False
+        records_num = np.count_nonzero(self.np_bounds)
+        if records_num != max_range * max_col * 4:
+            self.queryStatus = False
+            return False
         
         self.queryStatus = True
         
@@ -275,50 +191,13 @@ class CoordinateConverter(object):
             strlist = item.split()
             if not strlist[0] == 'MAC':
                 continue
-            
-            if self.useSubplot:
-                range_, col, xmin, xmax, ymin, ymax = self.parse_bety_sub_boundaries(item, self.plots[item])
-            else:
-                range_, col, xmin, xmax, ymin, ymax = self.parse_site_boundary(item, self.plots[item])
+            range_, col, xmin, xmax, ymin, ymax = self.parse_site_boundary(item, self.plots[item])
             
             if range_ == 0:
                 continue
             self.insert_boundary_to_nparray(range_, col, xmin, xmax, ymin, ymax) 
         
         return
-    
-    def parse_bety_sub_boundaries(self, site, bound_record):
-        
-        side_flag = -1
-        
-        if site.endswith(' E'):
-            side_flag = 2
-        elif site.endswith(' W'):
-            side_flag = 1
-        else:
-            return 0, 0, 0, 0, 0, 0
-        
-        # MAC Field Scanner Season 4 Range 5 Column 6 W
-        plot_record = [int(s) for s in site.split() if s.isdigit()]
-        if len(plot_record) != 3:
-            return 0, 0, 0, 0, 0, 0
-        
-        self.seasonNum = plot_record[0]
-        range_ = plot_record[1]
-        col = (plot_record[2]-1)*2 + side_flag
-        
-        latlngs = self.bety_str_parsing(bound_record)
-        
-        gantry_coords = []
-        for latlng in latlngs:
-            gantry_coords.append(self.latlng_to_Scanalyzer(latlng))
-            
-        xmin = gantry_coords[2][0]
-        xmax = gantry_coords[0][0]
-        ymin = gantry_coords[1][1]
-        ymax = gantry_coords[0][1]
-        
-        return range_, col, xmin, xmax, ymin, ymax
     
     def parse_site_boundary(self, site, bound_record):
         
@@ -358,51 +237,13 @@ class CoordinateConverter(object):
         
         range_ -= 1
         col -= 1
-        
-        if self.useSubplot:
-            self.np_bounds_subplot[range_][col][0] = xmin
-            self.np_bounds_subplot[range_][col][1] = xmax
-            self.np_bounds_subplot[range_][col][2] = ymin
-            self.np_bounds_subplot[range_][col][3] = ymax
-        else:
-            self.np_bounds[range_][col][0] = xmin
-            self.np_bounds[range_][col][1] = xmax
-            self.np_bounds[range_][col][2] = ymin
-            self.np_bounds[range_][col][3] = ymax
+        self.np_bounds[range_][col][0] = xmin
+        self.np_bounds[range_][col][1] = xmax
+        self.np_bounds[range_][col][2] = ymin
+        self.np_bounds[range_][col][3] = ymax
         
         return
     
-    def add_gaps_in_np_bounds(self):
-        
-        if not self.queryStatus:
-            return
-        
-        for plot_g_row in range(107):
-            for plot_g_col in range(16):
-                row_base = plot_g_row//2
-                row_extend = plot_g_row%2
-                col_base = plot_g_col
-                
-                if row_extend == 0:
-                    xmin = self.np_bounds[row_base][col_base][0]
-                    xmax = self.np_bounds[row_base][col_base][1]
-
-                    
-                if row_extend == 1:
-                    xmin = self.np_bounds[row_base][col_base][1]
-                    xmax = self.np_bounds[row_base+1][col_base][0]
-                    
-                ymin = self.np_bounds[row_base][col_base][2]
-                ymax = self.np_bounds[row_base][col_base][3]
-                
-                self.np_bounds_w_gaps[plot_g_row][plot_g_col][0] = xmin
-                self.np_bounds_w_gaps[plot_g_row][plot_g_col][1] = xmax
-                self.np_bounds_w_gaps[plot_g_row][plot_g_col][2] = ymin
-                self.np_bounds_w_gaps[plot_g_row][plot_g_col][3] = ymax
-                
-        return
-    
-
 def load_json(meta_path):
     try:
         with open(meta_path, 'r') as fin:
@@ -411,7 +252,7 @@ def load_json(meta_path):
         fail('Corrupt metadata file, ' + str(ex))
         
 def fail(reason):
-    print >> sys.stderr, reason
+    print(reason)
     
     
 def lower_keys(in_dict):
