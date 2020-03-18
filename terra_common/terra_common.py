@@ -3,10 +3,12 @@ Created on Sep 6, 2016
 
 @author: Zongyang Li
 '''
-import json, sys, utm
+import json, sys, utm, re
 import numpy as np
+from datetime import datetime
 from math import cos, pi
 from .terrautils.betydb import get_site_boundaries
+from .terrautils import betydb
 
 # Scanalyzer -> MAC formular @ https://terraref.gitbooks.io/terraref-documentation/content/user/geospatial-information.html
 # Mx = ax + bx * Gx + cx * Gy
@@ -42,7 +44,7 @@ class CoordinateConverter(object):
         self.x_range = 0
         self.y_column = 0
         self.seasonNum = 0
-        self.np_bounds = np.zeros((54, 16, 4))
+        self.np_bounds = None   # np.zeros((54, 16, 4))
         self.np_bounds_w_gaps = np.zeros((107, 16, 4)) # row: 54rows+53gaps, cols: 16cols no gaps
         self.np_bounds_subplot = np.zeros((54, 32, 4))
         self.useSubplot = False
@@ -240,11 +242,14 @@ class CoordinateConverter(object):
         return gantry_coord
     
     def bety_query(self, str_date, useSubplot=False):
-        
         self.useSubplot = useSubplot
-        
+        # After S10 the betydb url changed to OPEN betydb: http://128.196.65.186:8000/bety/
+        if datetime.strptime(str_date, "%Y-%m-%d") >= datetime(2019, 11, 25):
+            betydb.BETYDB_URL = 'http://128.196.65.186:8000/bety/'
         self.plots = get_site_boundaries(str_date, city="Maricopa")
-        
+        plot_season_range_col =  [[int(x) for x in re.findall(r'\d+', x)] for x in list(self.plots.keys())] # find numbers in plot name
+        _, max_range, max_col = np.max(plot_season_range_col, axis=0)
+        self.np_bounds = np.zeros((max_range, max_col, 4))
         self.parse_bety_plots()
        
         if self.useSubplot:
@@ -254,7 +259,7 @@ class CoordinateConverter(object):
                 return False
         else:
             records_num = np.count_nonzero(self.np_bounds)
-            if records_num != 864*4:
+            if records_num != max_range * max_col * 4:
                 self.queryStatus = False
                 return False
         
