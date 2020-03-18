@@ -3,7 +3,7 @@ Created on Sep 6, 2016
 
 @author: Zongyang Li
 '''
-import json, sys, utm
+import json, sys, utm, re
 import numpy as np
 from math import cos, pi
 from .terrautils.betydb import get_site_boundaries
@@ -42,7 +42,7 @@ class CoordinateConverter(object):
         self.x_range = 0
         self.y_column = 0
         self.seasonNum = 0
-        self.np_bounds = np.zeros((54, 16, 4))
+        self.np_bounds = None   # np.zeros((54, 16, 4))
         self.np_bounds_w_gaps = np.zeros((107, 16, 4)) # row: 54rows+53gaps, cols: 16cols no gaps
         self.np_bounds_subplot = np.zeros((54, 32, 4))
         self.useSubplot = False
@@ -244,7 +244,9 @@ class CoordinateConverter(object):
         self.useSubplot = useSubplot
         
         self.plots = get_site_boundaries(str_date, city="Maricopa")
-        
+        plot_season_range_col =  [[int(x) for x in re.findall(r'\d+', x)] for x in list(self.plots.keys())] # find numbers in plot name
+        _, max_range, max_col = np.max(plot_season_range_col, axis=0)
+        self.np_bounds = np.zeros((max_range, max_col, 4))
         self.parse_bety_plots()
        
         if self.useSubplot:
@@ -254,7 +256,7 @@ class CoordinateConverter(object):
                 return False
         else:
             records_num = np.count_nonzero(self.np_bounds)
-            if records_num != 864*4:
+            if records_num != max_range * max_col * 4:
                 self.queryStatus = False
                 return False
         
