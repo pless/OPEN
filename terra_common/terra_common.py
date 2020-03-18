@@ -73,14 +73,14 @@ class CoordinateConverter(object):
                     plot_col = j + 1
                     break
         else:
-            for i in range(54):
+            for i in range(self.max_range):
                 xmin = self.np_bounds[i][0][0]
                 xmax = self.np_bounds[i][0][1]
                 if (x > xmin) and (x <= xmax):
                     plot_row = i + 1
                     break
                     
-            for j in range(16):
+            for j in range(self.max_col):
                 ymin = self.np_bounds[plot_row-1][j][2]
                 ymax = self.np_bounds[plot_row-1][j][3]
                 if (y > ymin) and (y <= ymax):
@@ -121,14 +121,14 @@ class CoordinateConverter(object):
             return int(plot_row), int(plot_col)
         
         if not self.useSubplot:
-            cols = 16
+            cols = self.max_col
             col = plotNum % cols
             if col == 0:
                 plot_row = plotNum // cols
                 if (plot_row % 2 == 0):
                     plot_col = 1
                 else:
-                    plot_col = 16
+                    plot_col = self.max_col
                     
                 return int(plot_row), int(plot_col)
             
@@ -197,7 +197,7 @@ class CoordinateConverter(object):
             if plot_row % 2 == 0:
                 plot_col = 17 - plot_col
                 
-            plotNum = (plot_row-1)*16 + plot_col
+            plotNum = (plot_row-1)*self.max_col + plot_col
         
             return int(plotNum)
     
@@ -249,6 +249,8 @@ class CoordinateConverter(object):
         self.plots = get_site_boundaries(str_date, city="Maricopa")
         plot_season_range_col =  [[int(x) for x in re.findall(r'\d+', x)] for x in list(self.plots.keys())] # find numbers in plot name
         _, max_range, max_col = np.max(plot_season_range_col, axis=0)
+        self.max_range = max_range
+        self.max_col = max_col
         self.np_bounds = np.zeros((max_range, max_col, 4))
         self.parse_bety_plots()
        
