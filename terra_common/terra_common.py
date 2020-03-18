@@ -5,8 +5,10 @@ Created on Sep 6, 2016
 '''
 import json, sys, utm, re
 import numpy as np
+from datetime import datetime
 from math import cos, pi
 from .terrautils.betydb import get_site_boundaries
+from .terrautils import betydb
 
 # Scanalyzer -> MAC formular @ https://terraref.gitbooks.io/terraref-documentation/content/user/geospatial-information.html
 # Mx = ax + bx * Gx + cx * Gy
@@ -240,9 +242,10 @@ class CoordinateConverter(object):
         return gantry_coord
     
     def bety_query(self, str_date, useSubplot=False):
-        
         self.useSubplot = useSubplot
-        
+        # After S10 the betydb url changed to OPEN betydb: http://128.196.65.186:8000/bety/
+        if datetime.strptime(str_date, "%Y-%m-%d") >= datetime(2019, 11, 25):
+            betydb.BETYDB_URL = 'http://128.196.65.186:8000/bety/'
         self.plots = get_site_boundaries(str_date, city="Maricopa")
         plot_season_range_col =  [[int(x) for x in re.findall(r'\d+', x)] for x in list(self.plots.keys())] # find numbers in plot name
         _, max_range, max_col = np.max(plot_season_range_col, axis=0)

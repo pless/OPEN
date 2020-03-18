@@ -71,8 +71,10 @@ def query(endpoint="search", **kwargs):
     This is general function for querying the betyDB API. It automatically
     decodes the json response if one is returned.
     """
-
-    payload = { 'key': get_bety_key() }
+    if BETYDB_URL == 'http://128.196.65.186:8000/bety/':
+        payload = {}
+    else:
+        payload = { 'key': get_bety_key() }
     payload.update(kwargs)
 
     r = requests.get(get_bety_api(endpoint), params=payload)
