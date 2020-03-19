@@ -43,6 +43,8 @@ class CoordinateConverter(object):
         self.pixSize = 1
         self.x_range = 0
         self.y_column = 0
+        self.max_col = None
+        self.max_range = None
         self.seasonNum = 0
         self.np_bounds = None   # np.zeros((54, 16, 4))
         self.queryStatus = False
@@ -166,6 +168,8 @@ class CoordinateConverter(object):
         # After S10 the betydb url changed to OPEN betydb: http://128.196.65.186:8000/bety/
         if datetime.strptime(str_date, "%Y-%m-%d") >= datetime(2019, 11, 25):
             betydb.BETYDB_URL = 'http://128.196.65.186:8000/bety/'
+        else:
+            betydb.BETYDB_URL = "https://terraref.ncsa.illinois.edu/bety"
         self.plots = get_site_boundaries(str_date, city="Maricopa")
         plot_season_range_col =  [[int(x) for x in re.findall(r'\d+', x)] for x in list(self.plots.keys())] # find numbers in plot name
         _, max_range, max_col = np.max(plot_season_range_col, axis=0)
@@ -215,11 +219,15 @@ class CoordinateConverter(object):
         gantry_coords = []
         for latlng in latlngs:
             gantry_coords.append(self.latlng_to_Scanalyzer(latlng))
-            
-        xmin = gantry_coords[2][0]
-        xmax = gantry_coords[0][0]
-        ymin = gantry_coords[1][1]
-        ymax = gantry_coords[0][1]
+        gantry_coords = np.array(gantry_coords)
+        xmin = gantry_coords[:, 0].min()
+        xmax = gantry_coords[:, 0].max()
+        ymin = gantry_coords[:, 1].min()
+        ymax = gantry_coords[:, 1].max()
+        # xmin = gantry_coords[2][0]
+        # xmax = gantry_coords[0][0]
+        # ymin = gantry_coords[1][1]
+        # ymax = gantry_coords[0][1]
         
         return range_, col, xmin, xmax, ymin, ymax
     
