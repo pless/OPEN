@@ -106,29 +106,29 @@ def scanner3d_crop():
         os.makedirs(args.out_path)
     logger.info('scanning folders')
     task_list = []
-    if args.task_list is None:
-        for date_folder in os.listdir(args.raw_path):
-            folder_date = datetime.strptime(date_folder, '%Y-%m-%d')
-            if folder_date < start_date or folder_date > end_date:
-                continue
-            raw_date_folder_path = os.path.join(args.raw_path, date_folder)
-            ply_date_folder_path = os.path.join(args.ply_path, date_folder)
-            for sub_folder in os.listdir(raw_date_folder_path):
-                # task format: raw_data_folder, ply_data_folder, output_folder,
-                #              sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.DEBUG):
-                task_raw_path = os.path.join(raw_date_folder_path, sub_folder)
-                task_ply_path = os.path.join(ply_date_folder_path, sub_folder)
-                task = (task_raw_path, task_ply_path, args.out_path, cc)
-                task_list.append(task)
-    else:
-        with open(args.task_list) as f:
-            task_timestamp_list = f.read().splitlines()
-            for task_timestamp in task_timestamp_list:
-                task_date = task_timestamp.split('__')[0]
-                task_raw_path = os.path.join(args.raw_path, task_date, task_timestamp)
-                task_ply_path = os.path.join(args.ply_path, task_date, task_timestamp)
-                task = (task_raw_path, task_ply_path, args.out_path, cc)
-                task_list.append(task)
+    # if args.task_list is None:
+    for date_folder in os.listdir(args.raw_path):
+        folder_date = datetime.strptime(date_folder, '%Y-%m-%d')
+        if folder_date < start_date or folder_date > end_date:
+            continue
+        raw_date_folder_path = os.path.join(args.raw_path, date_folder)
+        ply_date_folder_path = os.path.join(args.ply_path, date_folder)
+        for sub_folder in os.listdir(raw_date_folder_path):
+            # task format: raw_data_folder, ply_data_folder, output_folder,
+            #              sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.DEBUG):
+            task_raw_path = os.path.join(raw_date_folder_path, sub_folder)
+            task_ply_path = os.path.join(ply_date_folder_path, sub_folder)
+            task = (task_raw_path, task_ply_path, args.out_path, cc)
+            task_list.append(task)
+    # else:
+    #     with open(args.task_list) as f:
+    #         task_timestamp_list = f.read().splitlines()
+    #         for task_timestamp in task_timestamp_list:
+    #             task_date = task_timestamp.split('__')[0]
+    #             task_raw_path = os.path.join(args.raw_path, task_date, task_timestamp)
+    #             task_ply_path = os.path.join(args.ply_path, task_date, task_timestamp)
+    #             task = (task_raw_path, task_ply_path, args.out_path, cc)
+    #             task_list.append(task)
 
     total_tasks = len(task_list)
     logger.info('total task: {}'.format(total_tasks))
