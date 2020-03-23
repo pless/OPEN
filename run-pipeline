@@ -39,7 +39,7 @@ def stereo_crop():
                 .format(args.raw_path, args.out_path, args.start, args.end, args.processes))
     # TODO load a cc and dump to some where for cache
     cc = CC()
-    cc.bety_query(args.start, useSubplot=False)
+    cc.bety_query(args.start)
     start_date = datetime.strptime(args.start, '%Y-%m-%d')
     end_date = datetime.strptime(args.end, '%Y-%m-%d')
 
@@ -98,7 +98,7 @@ def scanner3d_crop():
                 .format(args.raw_path, args.ply_path, args.start, args.end, args.processes))
     # TODO load a cc and dump to some where
     cc = CC()
-    cc.bety_query(args.start, useSubplot=False)
+    cc.bety_query(args.start)
     start_date = datetime.strptime(args.start, '%Y-%m-%d')
     end_date = datetime.strptime(args.end, '%Y-%m-%d')
 
