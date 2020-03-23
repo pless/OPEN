@@ -196,7 +196,8 @@ class CoordinateConverter(object):
             if not strlist[0] == 'MAC':
                 continue
             range_, col, xmin, xmax, ymin, ymax = self.parse_site_boundary(item, self.plots[item])
-            
+            if item.endswith(" W") or item.endswith(" E"):
+                continue
             if range_ == 0:
                 continue
             self.insert_boundary_to_nparray(range_, col, xmin, xmax, ymin, ymax) 
