@@ -165,9 +165,9 @@ def parse_args():
     args = parser.parse_args()
     return args
 cc = None
+args = parse_args()
 if args.coord_converter is not None:
     cc_file_name = args.coord_converter
     with open(cc_file_name, 'rb') as f:
         cc = pickle.load(f)
-args = parse_args()
 args.crop_func(cc=cc)
