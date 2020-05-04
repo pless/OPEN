@@ -23,7 +23,7 @@ def unpack(func):
 def stereo_singe_image_process(*args, **kwargs):
         crop.stereo.singe_image_process(*args, **kwargs)
 
-def stereo_crop():
+def stereo_crop(cc=None):
     logger = logging.getLogger('stereo_crop_ppln_main')
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s: \t%(message)s')
@@ -38,8 +38,9 @@ def stereo_crop():
                 '\n\t number of processes: {}'
                 .format(args.raw_path, args.out_path, args.start, args.end, args.processes))
     # TODO load a cc and dump to some where for cache
-    cc = CC()
-    cc.bety_query(args.start)
+    if cc is None:
+        cc = CC()
+        cc.bety_query(args.start)
     start_date = datetime.strptime(args.start, '%Y-%m-%d')
     end_date = datetime.strptime(args.end, '%Y-%m-%d')
 
@@ -82,7 +83,7 @@ def stereo_crop():
 def scanner3d_singe_image_process(*args, **kwargs):
         crop.scanner3d.scanner3d_single_crop(*args, **kwargs)
 
-def scanner3d_crop():
+def scanner3d_crop(cc=None):
     logger = logging.getLogger('scanner3d_crop_ppln_main')
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s: \t%(message)s')
@@ -97,8 +98,9 @@ def scanner3d_crop():
                 '\n\t number of processes: {}'
                 .format(args.raw_path, args.ply_path, args.start, args.end, args.processes))
     # TODO load a cc and dump to some where
-    cc = CC()
-    cc.bety_query(args.start)
+    if cc is None:
+        cc = CC()
+        cc.bety_query(args.start)
     start_date = datetime.strptime(args.start, '%Y-%m-%d')
     end_date = datetime.strptime(args.end, '%Y-%m-%d')
 
@@ -158,9 +160,14 @@ def parse_args():
     parser.add_argument('--start', metavar='yyyy-mm-dd', help='Start date. Format: yyyy-mm-dd', required=True)
     parser.add_argument('--end', metavar='yyyy-mm-dd', help='End date. Format: yyyy-mm-dd', required=True)
     parser.add_argument('-p', '--processes', help='number of sub-processes', default=4, type=int)
+    parser.add_argument('--coord-converter', help='path to the pickled cc', default=None, type=str)
 
     args = parser.parse_args()
     return args
-
+cc = None
 args = parse_args()
-args.crop_func()
+if args.coord_converter is not None:
+    cc_file_name = args.coord_converter
+    with open(cc_file_name, 'rb') as f:
+        cc = pickle.load(f)
+args.crop_func(cc=cc)

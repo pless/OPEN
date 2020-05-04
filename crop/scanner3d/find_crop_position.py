@@ -102,7 +102,7 @@ def find_crop_position(raw_data_folder, ply_data_folder, output_folder, cc, log_
     for crop_position_dict, gIm, pIm, ply_xyz_map, sensor_str in zip((east_crop_position_dict, west_crop_position_dict),(east_gIm, west_gIm), (east_pIm, west_pIm), (east_ply_xyz_map, west_ply_xyz_map), ('east', 'west')):
         for (plot_row, plot_col), (row_range, col_range) in crop_position_dict.items():
             plot_num = cc.fieldPartition_to_plotNum(plot_row, plot_col)
-            plot_output_path = os.path.join(output_folder, '{:02d}_{:02d}_{:03d}'.format(int(plot_row), int(plot_col), int(plot_num)))
+            plot_output_path = os.path.join(output_folder, '{}_{}_{}'.format(int(plot_row), int(plot_col), int(plot_num)))
             if not os.path.isdir(plot_output_path):
                 try:
                     os.makedirs(plot_output_path)
