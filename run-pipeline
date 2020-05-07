@@ -215,7 +215,7 @@ def parse_args():
     parser_stereo.add_argument('--raw-path', help='path to the root of raw data', required=True)
     parser_stereo.add_argument('--lv1-path', help='path to the Level 1 data (out_dir)', required=True)
     parser_stereo.add_argument('--out-path', help='path to the output folder (plot_dir)', required=True)
-    parser_stereo.set_defaults(crop_func=stereo_crop)
+    parser_stereo.set_defaults(crop_func=thermal_crop)
 
     parser_scanner3d = subparsers.add_parser('scanner3d', help='scanner3DTop')
     parser_scanner3d.add_argument('--raw-path', help='path to the root of raw data', required=True)
