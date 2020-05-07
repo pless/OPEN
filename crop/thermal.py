@@ -424,7 +424,7 @@ def find_input_files(in_dir):
 
 
 def fail(reason):
-    print >> sys.stderr, reason
+    print(sys.stderr, reason)
     
 def extract_roiBox_from_metadata(metadata):
     
