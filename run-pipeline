@@ -81,7 +81,7 @@ def stereo_crop(cc=None):
 
 @unpack
 def thermal_singe_image_process(*args, **kwargs):
-        crop.thermalCropping.singe_image_process(*args, **kwargs)
+        crop.thermal.singe_image_process(*args, **kwargs)
 
 def thermal_crop(cc=None):
     logger = logging.getLogger('thermal_crop_ppln_main')
@@ -128,7 +128,7 @@ def thermal_crop(cc=None):
                 skipped_count += 1
                 continue
             task_raw_path = os.path.join(raw_date_folder_path, sub_folder)
-            task = (task_raw_path, args.lv1_path, args.out_path, cc)
+            task = (task_raw_path, args.lv1_path, args.out_path, args.out_path, cc)
             task_list.append(task)
     logger.info('total task: {}'.format(total_task_count))
     if skipped_count != 0:
