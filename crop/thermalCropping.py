@@ -154,7 +154,7 @@ def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
     # add scan shift to y axis
     field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
     
-    save_dir = '{0:02d}-{1:02d}-{2:04d}'.format(plot_row, plot_col, plotNum) 
+    save_dir = '{0:02d}_{1:02d}_{2:04d}'.format(plot_row, plot_col, plotNum) 
     
     # bin to image
     raw_data = load_flir_data(binfile)
