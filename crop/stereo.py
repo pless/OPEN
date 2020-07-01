@@ -15,12 +15,18 @@ import shutil
 import multiprocessing
 import cv2
 import terra_common
+from networkx.algorithms.distance_measures import center
 
 fov_adj = 0.97
 
 # Test by Baker
 FOV_MAGIC_NUMBER = 0.1552 
 FOV_IN_2_METER_PARAM = 0.837 # since we don't have a true value of field of view in 2 meters, we use this parameter(meter) to estimate fov in Y-
+
+#SEASON_10_SHIFT = 0.2
+scan_shift = -0.03
+
+os.environ['BETYDB_KEY'] = '9999999999999999999999999999999999999999'
 
 def options():
     
@@ -67,7 +73,7 @@ def bin_to_png(in_dirs, out_dirs, plot_dir, convt):
             fail("\tFailed to process folder %s: %s" % (i, str(ex)))
 
 def fail(reason):
-    print(reason)
+    print (reason)
 
 def lower_keys(in_dict):
     if type(in_dict) is dict:
@@ -135,6 +141,8 @@ def parse_metadata(metadata):
             cam_z = cam_meta["location in camera box z [m]"]
         else:
             cam_z = 0
+            
+        y_ends = gantry_meta['y end pos [m]']
 
     except KeyError as err:
         fail('Metadata file missing key: ' + err.args[0])
@@ -143,7 +151,7 @@ def parse_metadata(metadata):
     position = [float(gantry_x), float(gantry_y), float(gantry_z)]
     center_position = [position[0]+float(cam_x), position[1]+float(cam_y), position[2]+float(cam_z)]
     
-    return center_position
+    return center_position, y_ends
 
 def get_fov(metadata, camHeight):
     try:
@@ -408,6 +416,17 @@ def metadata_to_imageBoundaries_with_gaps(center_position, fov, image_shape, con
     
     return plotNum, roiBox, field_roiBox
 
+def add_scan_shift_to_field_roiBox(field_roiBox, y_ends):
+    
+    if y_ends == '0':     # + shift
+        field_roiBox[2] = field_roiBox[2]+scan_shift
+        field_roiBox[3] = field_roiBox[3]+scan_shift
+    else:               # - shift   
+        field_roiBox[2] = field_roiBox[2]-scan_shift
+        field_roiBox[3] = field_roiBox[3]-scan_shift
+        
+    return field_roiBox
+
 def singe_image_process(in_dir, out_dir, plot_dir, convt):
     
     time_stamp = os.path.basename(in_dir)
@@ -429,15 +448,12 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     
     # parse meta data
     metadata = lower_keys(load_json(os.path.join(in_dir, metas[0])))
-    center_position = parse_metadata(metadata)
+    center_position, y_ends = parse_metadata(metadata)
+    
     if center_position == None:
         print(in_dir)
         return
     fov = get_fov_formular(metadata, center_position[2])
-    
-    # make fov y bigger to fit
-    #fov[0] = fov[0]*fov_adj
-    #fov[1] = fov[1]*fov_adj
     
     image_shape = (3296, 2472)
     
@@ -445,8 +461,8 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     try:
         plotNum, roiBox, field_roiBox = metadata_to_imageBoundaries(center_position, fov, image_shape, convt)
     except ValueError as err:
-            fail('Error metadata_to_imageBoundaries:' + in_dir)
-            return
+        fail('Error metadata_to_imageBoundaries:' + in_dir)
+        return
             
     if plotNum == None:
         print(time_stamp+'plotNum could not found.\n')
@@ -454,7 +470,12 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     plot_row, plot_col = convt.plotNum_to_fieldPartition(plotNum)
     if plotNum == 0:
         return
-
+    
+    # add scan shift to y axis
+    field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
+    
+    plotNum, roiBox, field_roiBox = metadata_to_imageBoundaries(center_position, fov, image_shape, convt)
+    
         
     # bin to image
     try:
@@ -475,8 +496,7 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     roi_img = cv_img[roiBox[0]:roiBox[1], roiBox[2]:roiBox[3]]
     
     # save image
-    
-    save_dir = '{0}_{1}_{2}'.format(plot_row, plot_col, plotNum)
+    save_dir = '{0:02d}_{1:02d}_{2:04d}'.format(plot_row, plot_col, plotNum)
     s_d = os.path.join(plot_dir, save_dir)
     if not os.path.isdir(s_d):
         os.mkdir(s_d)
@@ -532,12 +552,20 @@ def stitch_plot_rgb_image(in_dir, out_dir, str_date, convt):
     
     # init output image
     metadata = lower_keys(load_json(os.path.join(in_dir, metas[0])))
-    center_position = parse_metadata(metadata)
+    center_position, y_ends = parse_metadata(metadata)
+    if center_position == None:
+        return
     fov = get_fov_formular(metadata, center_position[2])
     field_dist_per_pix = fov[0]/3296
     img_wids = int(round((plot_bounds[3]-plot_bounds[2])/field_dist_per_pix))+2000
     img_hts = int(round((plot_bounds[1]-plot_bounds[0])/field_dist_per_pix))+2000
     stitched_img = np.zeros((img_hts,img_wids,3),np.uint8)
+    
+    rect_x_min = img_wids
+    rect_y_min = img_hts
+    rect_x_max = 0
+    rect_y_max = 0
+    
     
     start_offset = 500
     for json_file in metas:
@@ -557,23 +585,38 @@ def stitch_plot_rgb_image(in_dir, out_dir, str_date, convt):
             print(1)
             continue
         
+        if x_start < rect_x_min :
+            rect_x_min = x_start
+        if y_start < rect_y_min:
+            rect_y_min = y_start
+        if x_start+width > rect_x_max:
+            rect_x_max = x_start+width
+        if y_start+height > rect_y_max:
+            rect_y_max = y_start+height
+        
         stitched_img[y_start:y_start+height, x_start:x_start+width] = img
         
+    if rect_y_max < rect_y_min or rect_x_max < rect_x_min:
+        return
+    
+    save_img = stitched_img[rect_y_min:rect_y_max, rect_x_min:rect_x_max]
+    
     # save output
     out_file_name = '{}_{}.png'.format(str_date, dir_name)
-    cv2.imwrite(os.path.join(out_dir, out_file_name), stitched_img)
+    
+    cv2.imwrite(os.path.join(out_dir, out_file_name), save_img)
     
     return
 
 def test():
     
-    str_date = '2017-05-24'
+    str_date = '2019-06-18'
     
     in_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/stereoTop/', str_date)
     out_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/StitchedPlotRGB', str_date)
     
     convt = terra_common.CoordinateConverter()
-    qFlag = convt.bety_query(str_date, False)
+    qFlag = convt.bety_query(str_date)
     
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
@@ -601,7 +644,7 @@ def test_single_dir():
     str_date = '2018-05-24'
     
     convt = terra_common.CoordinateConverter()
-    qFlag = convt.bety_query(str_date, False)
+    qFlag = convt.bety_query(str_date)
     
     stitch_plot_rgb_image(in_dir, out_dir, str_date, convt)
     
@@ -609,15 +652,12 @@ def test_single_dir():
     
     return
 
-def full_season_crop_rgb(raw_rgb_dir, out_dir, plot_dir, start_date, end_date):
+def full_season_crop_rgb(raw_rgb_dir, out_dir, plot_dir, start_date, end_date, convt):
     
     # initialize data structure
     d0 = datetime.strptime(start_date, '%Y-%m-%d').date()
     d1 = datetime.strptime(end_date, '%Y-%m-%d').date()
     deltaDay = d1 - d0
-    
-    convt = terra_common.CoordinateConverter()
-    qFlag = convt.bety_query(start_date, False) # All plot boundaries in one season is the same
     
     # loop one season directories
     for i in range(deltaDay.days+1):
@@ -628,25 +668,81 @@ def full_season_crop_rgb(raw_rgb_dir, out_dir, plot_dir, start_date, end_date):
         
         out_path = os.path.join(out_dir, str_date)
         
+        plot_path = os.path.join(plot_dir, str_date)
+        
         if not os.path.isdir(raw_path):
             continue
         
-        #crop_rgb_imageToPlot(raw_path, out_path, plot_dir, convt)
-        full_day_multi_process(raw_path, out_path, plot_dir, convt)
+        if not os.path.isdir(out_path):
+            os.mkdir(out_path)
+            
+        if not os.path.isdir(plot_path):
+            os.mkdir(plot_path)
+        
+        #crop_rgb_imageToPlot(raw_path, out_path, plot_path, convt)
+        full_day_multi_process(raw_path, out_path, plot_path, convt)
+    
+    return
+
+def full_season_rgb_stitch(png_dir, stitch_dir, start_date, end_date, convt):
+    
+    # initialize data structure
+    d0 = datetime.strptime(start_date, '%Y-%m-%d').date()
+    d1 = datetime.strptime(end_date, '%Y-%m-%d').date()
+    deltaDay = d1 - d0
+    
+    print(deltaDay.days)
+    
+    # loop one season directories
+    for i in range(deltaDay.days+1):
+        str_date = str(d0+timedelta(days=i))
+        print(str_date)
+        
+        png_path = os.path.join(png_dir, str_date)
+        
+        stitch_path = os.path.join(stitch_dir, str_date)
+        
+        if not os.path.isdir(png_path):
+            continue
+        
+        if not os.path.isdir(stitch_path):
+            os.makedirs(stitch_path)
+            
+        list_dirs = os.listdir(png_path)
+    
+        for d in list_dirs:
+            in_path = os.path.join(png_path, d)
+            out_path = os.path.join(stitch_path, d)
+            
+            if not os.path.isdir(in_path):
+                continue
+            
+            if not os.path.isdir(out_path):
+                os.mkdir(out_path)
+        
+            stitch_plot_rgb_image(in_path, out_path, str_date, convt)
     
     return
 
 def main():
-    start_date = '2017-04-15'  # S6 start date
-    end_date = '2017-08-31'   # S6 end date
+    start_date = '2019-06-10'  # S9 start date
+    end_date = '2019-06-20'   # S9 end date
     
-    args = options()
+    convt = terra_common.CoordinateConverter()
+    qFlag = convt.bety_query('2019-06-18') # All plot boundaries in one season should be the same, currently 2019-06-18 works best
     
-    full_season_crop_rgb('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/raw_data/stereoTop',
-                          '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_1/stereoTop',
-                           '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/stereoTop', start_date, end_date)
-    #full_season_crop_rgb(args.in_dir, args.out_dir, args.plot_dir, start_date, end_date)
-
+    if not qFlag:
+        return
+    #args = options()
+    
+    raw_dir = '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/raw_data/stereoTop'
+    out_dir = '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_1/stereoTop'
+    plot_dir = '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/rgb_crop'
+    stitch_dir = '/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/StitchedPlotRGB'
+    
+    full_season_crop_rgb(raw_dir, out_dir, plot_dir, start_date, end_date, convt)
+    
+    full_season_rgb_stitch(plot_dir, stitch_dir, start_date, end_date, convt)
 
 
 if __name__ == '__main__':
