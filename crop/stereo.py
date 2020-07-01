@@ -496,7 +496,7 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     roi_img = cv_img[roiBox[0]:roiBox[1], roiBox[2]:roiBox[3]]
     
     # save image
-    save_dir = '{0:02d}-{1:02d}-{2:04d}'.format(plot_row, plot_col, plotNum)
+    save_dir = '{0:02d}_{1:02d}_{2:04d}'.format(plot_row, plot_col, plotNum)
     s_d = os.path.join(plot_dir, save_dir)
     if not os.path.isdir(s_d):
         os.mkdir(s_d)
