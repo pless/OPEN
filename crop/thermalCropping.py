@@ -4,7 +4,7 @@ Created on Jan 17, 2020
 @author: zli
 '''
 
-import sys, os.path, json, random, terra_common, math
+import sys, os.path, json, random, terra_common, math, argparse
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from glob import glob
@@ -13,12 +13,15 @@ import numpy as np
 from numpy.matlib import repmat
 from scipy.ndimage.filters import convolve
 from PIL import Image
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import shutil
 import cv2
 
 #fov_alpha = 1.03 # 05-19
-fov_alpha = 1
+fov_alpha = 1.12
+scan_shift = -0.03
+
+os.environ['BETYDB_KEY'] = '9999999999999999999999999999999999999999'
 
 class calibParam:
     def __init__(self):
@@ -126,19 +129,16 @@ def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
     base_name = os.path.basename(binfile)[:-4]
     out_npy_path = os.path.join(out_dir, '{}.npy'.format(base_name))
     out_png_path = os.path.join(out_dir, '{}.png'.format(base_name))
-    #if os.path.isfile(out_npy_path):
-    #   return
+    if os.path.isfile(out_npy_path):
+       return
     
     # parse meta data
     metadata = lower_keys(load_json(os.path.join(in_dir, metafile)))
-    center_position, scan_time, fov = parse_metadata(metadata)
+    center_position, scan_time, fov, y_ends = parse_metadata(metadata)
     
     if center_position is None:
         return
-    
-    # make fov y bigger to fit
-    #fov[0] = fov[0]*fov_adj
-    #fov[1] = fov[1]*fov_adj
+
     
     image_shape = (640, 480)
     
@@ -150,7 +150,11 @@ def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
     plot_row, plot_col = convt.plotNum_to_fieldPartition(plotNum)
     if plotNum == 0:
         return
-        
+    
+    # add scan shift to y axis
+    field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
+    
+    save_dir = '{0:02d}-{1:02d}-{2:04d}'.format(plot_row, plot_col, plotNum) 
     
     # bin to image
     raw_data = load_flir_data(binfile)
@@ -172,7 +176,6 @@ def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
     roi_img = color_img[int(roiBox[0]):int(roiBox[1]), int(roiBox[2]):int(roiBox[3])]
     
     # save image
-    save_dir = '{0:02d}-{1:02d}-{2:03d}'.format(plot_row, plot_col, plotNum)
     s_d = os.path.join(plot_dir, save_dir)
     if not os.path.isdir(s_d):
         os.mkdir(s_d)
@@ -204,6 +207,17 @@ def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
         json.dump(dst_json_data, outfile)
     
     return
+
+def add_scan_shift_to_field_roiBox(field_roiBox, y_ends):
+    
+    if y_ends == '0':     # + shift
+        field_roiBox[2] = field_roiBox[2]+scan_shift
+        field_roiBox[3] = field_roiBox[3]+scan_shift
+    else:               # - shift   
+        field_roiBox[2] = field_roiBox[2]-scan_shift
+        field_roiBox[3] = field_roiBox[3]-scan_shift
+        
+    return field_roiBox
 
 def rawData_to_temperature(rawData, scan_time, metadata):
     
@@ -253,7 +267,10 @@ def metadata_to_imageBoundaries(center_position, fov, image_shape, convt):
     plotNum = 0
     roiBox = []
     
-    field_dist_per_pix = fov[1]/image_shape[1]
+    # compute field per pix
+    field_dist_per_pix_1 = fov[1]/image_shape[1]
+    field_dist_per_pix_0 = fov[0]/image_shape[0]
+    
     
     # A: right lower point in the image
     x_a = center_position[0]-fov[0]/2
@@ -312,10 +329,10 @@ def metadata_to_imageBoundaries(center_position, fov, image_shape, convt):
             plotNum = convt.fieldPartition_to_plotNum(row_b, col_a)
             roiBox = [0, y_m, x_m, image_shape[1]]
             
-    xmin = x_a+(image_shape[0]-roiBox[1])*field_dist_per_pix
-    xmax = x_a+(image_shape[0]-roiBox[0])*field_dist_per_pix
-    ymin = y_a+(image_shape[1]-roiBox[3])*field_dist_per_pix
-    ymax = y_a+(image_shape[1]-roiBox[2])*field_dist_per_pix
+    xmin = x_a+(image_shape[0]-roiBox[1])*field_dist_per_pix_0
+    xmax = x_a+(image_shape[0]-roiBox[0])*field_dist_per_pix_0
+    ymin = y_a+(image_shape[1]-roiBox[3])*field_dist_per_pix_1
+    ymax = y_a+(image_shape[1]-roiBox[2])*field_dist_per_pix_1
     field_roiBox = [xmin,xmax,ymin,ymax]
     
     return plotNum, roiBox, field_roiBox
@@ -372,6 +389,8 @@ def parse_metadata(metadata):
         fov_x = cam_meta["field of view x [m]"]
         fov_y = cam_meta["field of view y [m]"]
         
+        y_ends = gantry_meta['y end pos [m]']
+        
         if "location in camera box z [m]" in cam_meta: # this may not be in older data
             cam_z = cam_meta["location in camera box z [m]"]
         else:
@@ -379,13 +398,13 @@ def parse_metadata(metadata):
 
     except KeyError as err:
         fail('Metadata file missing key: ' + err.args[0])
-        return None, None, None
+        return None, None, None, None
         
     position = [float(gantry_x), float(gantry_y), float(gantry_z)]
     center_position = [position[0]+float(cam_x), position[1]+float(cam_y), position[2]+float(cam_z)]
     fov = [float(fov_x)*fov_alpha, float(fov_y)*fov_alpha]
     
-    return center_position, scan_time, fov
+    return center_position, scan_time, fov, y_ends
     
 def lower_keys(in_dict):
     if type(in_dict) is dict:
@@ -424,7 +443,7 @@ def find_input_files(in_dir):
 
 
 def fail(reason):
-    print >> sys.stderr, reason
+    print (sys.stderr, reason)
     
 def extract_roiBox_from_metadata(metadata):
     
@@ -443,6 +462,7 @@ def stitch_plot_thermal_image(in_dir, out_dir, str_date, convt):
         
     # get plot boundaries
     dir_name = os.path.basename(in_dir)
+    
     plotId = dir_name.split('-')
     plot_row = int(plotId[0])
     plot_col = int(plotId[1])
@@ -457,14 +477,21 @@ def stitch_plot_thermal_image(in_dir, out_dir, str_date, convt):
     
     # init output image
     metadata = lower_keys(load_json(os.path.join(in_dir, metas[0])))
-    center_position, scan_time, fov = parse_metadata(metadata)
+    center_position, scan_time, fov, y_ends = parse_metadata(metadata)
     if center_position is None:
         return
     
+    '''
+    # original stitch codes
     field_dist_per_pix = fov[0]/640
     img_wids = int(round((plot_bounds[3]-plot_bounds[2])/field_dist_per_pix))+800
     img_hts = int(round((plot_bounds[1]-plot_bounds[0])/field_dist_per_pix))+800
     stitched_img = np.zeros((img_hts,img_wids,3),np.uint8)
+    
+    rect_x_min = img_wids
+    rect_y_min = img_hts
+    rect_x_max = 0
+    rect_y_max = 0
     
     start_offset = 500
     for json_file in metas:
@@ -484,22 +511,180 @@ def stitch_plot_thermal_image(in_dir, out_dir, str_date, convt):
             print(1)
             continue
         
-        stitched_img[y_start:y_start+height, x_start:x_start+width] = img
+        if x_start < rect_x_min :
+            rect_x_min = x_start
+        if y_start < rect_y_min:
+            rect_y_min = y_start
+        if x_start+width > rect_x_max:
+            rect_x_max = x_start+width
+        if y_start+height > rect_y_max:
+            rect_y_max = y_start+height
         
+        stitched_img[y_start:y_start+height, x_start:x_start+width] = img
+    '''
+    
+    # fov diff, add image weight
+    image_shape = (640, 480)
+    field_dist_per_pix_1 = fov[1]/image_shape[1]
+    field_dist_per_pix_0 = fov[0]/image_shape[0]
+    img_wids = int(round((plot_bounds[3]-plot_bounds[2])/field_dist_per_pix_1))+800
+    img_hts = int(round((plot_bounds[1]-plot_bounds[0])/field_dist_per_pix_0))+800
+    stitched_img = np.zeros((img_hts,img_wids,3),np.uint8)
+    
+    rect_x_min = img_wids
+    rect_y_min = img_hts
+    rect_x_max = 0
+    rect_y_max = 0
+    
+    start_offset = 500
+    for json_file in metas:
+        json_path = os.path.join(in_dir, json_file)
+        rgb_file = json_path[:-4]+'png'
+        
+        if not os.path.isfile(rgb_file):
+            continue
+        
+        metadata = load_json(json_path)
+        xmin,xmax,ymin,ymax = extract_roiBox_from_metadata(metadata)
+        img = cv2.imread(rgb_file)
+        height,width = img.shape[:2]
+        x_start = int(round((plot_bounds[3]-ymax)/field_dist_per_pix_0))+start_offset
+        y_start = int(round((plot_bounds[1]-xmax)/field_dist_per_pix_1))+start_offset
+        if x_start < 0 or y_start < 0:
+            print(1)
+            continue
+        
+        if x_start < rect_x_min :
+            rect_x_min = x_start
+        if y_start < rect_y_min:
+            rect_y_min = y_start
+        if x_start+width > rect_x_max:
+            rect_x_max = x_start+width
+        if y_start+height > rect_y_max:
+            rect_y_max = y_start+height
+        
+        #stitched_img[y_start:y_start+height, x_start:x_start+width] = img
+        
+        cv2.addWeighted(stitched_img[y_start:y_start+height, x_start:x_start+width], 0.5, img, 0.5, 0, stitched_img[y_start:y_start+height, x_start:x_start+width])
+        
+    save_img = stitched_img[rect_y_min:rect_y_max, rect_x_min:rect_x_max]
     # save output
     out_file_name = '{}_{}.png'.format(str_date, dir_name)
-    cv2.imwrite(os.path.join(out_dir, out_file_name), stitched_img)
+    cv2.imwrite(os.path.join(out_dir, out_file_name), save_img)
+    
+    return
+
+def full_season_thermalCrop_frame(in_dir, out_dir, plot_dir, png_dir, start_date, end_date, convt):
+    
+    # initialize data structure
+    d0 = datetime.strptime(start_date, '%Y-%m-%d').date()
+    d1 = datetime.strptime(end_date, '%Y-%m-%d').date()
+    deltaDay = d1 - d0
+    
+    print(deltaDay.days)
+    
+    # loop one season directories
+    for i in range(deltaDay.days+1):
+        str_date = str(d0+timedelta(days=i))
+        print(str_date)
+        
+        raw_path = os.path.join(in_dir, str_date)
+        
+        out_path = os.path.join(out_dir, str_date)
+        
+        plot_path = os.path.join(plot_dir, str_date)
+        
+        png_path = os.path.join(png_dir, str_date)
+        
+        if not os.path.isdir(raw_path):
+            continue
+        
+        if not os.path.isdir(out_path):
+            os.makedirs(out_path)
+            
+        if not os.path.isdir(plot_path):
+            os.makedirs(plot_path)
+            
+        if not os.path.isdir(png_path):
+            os.makedirs(png_path)
+        
+        #crop_rgb_imageToPlot(raw_path, out_path, plot_dir, convt)
+        crop_thermal_imageToPlot(raw_path, out_path, plot_path, png_path, convt)
+        #full_day_gen_cc(raw_path, out_path, convt)
     
     return
     
-def main(convt, str_date):
 
 
+def full_season_thermal_stitch(png_dir, stitch_dir, start_date, end_date, convt):
+    
+    # initialize data structure
+    d0 = datetime.strptime(start_date, '%Y-%m-%d').date()
+    d1 = datetime.strptime(end_date, '%Y-%m-%d').date()
+    deltaDay = d1 - d0
+    
+    print(deltaDay.days)
+    
+    # loop one season directories
+    for i in range(deltaDay.days+1):
+        str_date = str(d0+timedelta(days=i))
+        print(str_date)
+        
+        png_path = os.path.join(png_dir, str_date)
+        
+        stitch_path = os.path.join(stitch_dir, str_date)
+        
+        if not os.path.isdir(png_path):
+            continue
+        
+        if not os.path.isdir(stitch_path):
+            os.makedirs(stitch_path)
+            
+        list_dirs = os.listdir(png_path)
+    
+        for d in list_dirs:
+            in_path = os.path.join(png_path, d)
+            out_path = os.path.join(stitch_path, d)
+            
+            if not os.path.isdir(in_path):
+                continue
+            
+            if not os.path.isdir(out_path):
+                os.mkdir(out_path)
+        
+            stitch_plot_thermal_image(in_path, out_path, str_date, convt)
+    
+    return
+    
+def main():
+
+    '''
     in_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/raw_data/flirlrCamera', str_date)
     out_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_1/thermalData', str_date)
     plot_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/thermalCropToPlot/', str_date)
     png_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/thermalCropToPlot_png/', str_date)
     crop_thermal_imageToPlot(in_dir, out_dir, plot_dir, png_dir, convt)
+    '''
+    print("start...")
+    
+    start_date = '2019-05-23'  # S9 start date
+    end_date = '2019-06-04'   # S9 end date
+    
+    convt = terra_common.CoordinateConverter()
+    qFlag = convt.bety_query('2019-06-01') # All plot boundaries in one season should be the same, currently 2019-06-18 works best
+    
+    if not qFlag:
+        return
+    
+    in_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/raw_data/flirlrCamera')
+    out_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_1/thermalData')
+    plot_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/thermalCropToPlot/')
+    png_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/thermalCropToPlot_png/')
+    stitch_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/StitchedPlotThermal')
+    
+    full_season_thermalCrop_frame(in_dir, out_dir, plot_dir, png_dir, start_date, end_date, convt)
+    
+    full_season_thermal_stitch(png_dir, stitch_dir, start_date, end_date, convt)
     
     return
 
@@ -534,12 +719,8 @@ def test(convt, str_date):
 
 if __name__ == '__main__':
     
-    str_date = '2018-05-24'
-    convt = terra_common.CoordinateConverter()
-    convt.bety_query(str_date, False)
-    
-    #main(convt, str_date)
-    test(convt, str_date)
+    main()
+    #test(convt, str_date)
     
     
     
