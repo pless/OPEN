@@ -118,7 +118,174 @@ def crop_thermal_imageToPlot(in_dir, out_dir, plot_dir, crop_color_dir, convt):
     
     return
 
+def metadata_to_boundsList(center_position, fov, image_shape, y_ends, convt):
+    
+    field_dist_per_pix = fov[1]/image_shape[1]
+    
+    # A: right lower point in the image
+    x_a = center_position[0]-fov[0]/2
+    y_a = center_position[1]-fov[1]/2
+    
+    # B: left upper point in the image
+    x_b = center_position[0]+fov[0]/2
+    y_b = center_position[1]+fov[1]/2
+    
+    img_x_index = np.zeros(image_shape[1])
+    img_y_index = np.zeros(image_shape[0])
+    
+    for i in range(image_shape[1]):
+        field_y_coordinate = y_b - field_dist_per_pix*i
+        field_col = convt.fieldPosition_to_fieldPartition(x_a, field_y_coordinate)[1]
+        img_x_index[i] = field_col
+        
+    for j in range(image_shape[0]):
+        field_x_coordinate = x_b - field_dist_per_pix*j
+        field_range = convt.fieldPosition_to_fieldPartition(field_x_coordinate, y_a)[0]
+        img_y_index[j] = field_range
+        
+    img_x_index.astype('uint16')
+    img_y_index.astype('uint16')
+    
+    col_unique = np.unique(img_x_index)
+    range_unique = np.unique(img_y_index)
+    
+    col_list = []
+    range_list = []
+    
+    for i in range(len(col_unique)):
+        col_num = col_unique[i]
+        if col_num == 0:
+            continue
+        target_indexs = np.where(img_x_index==col_num)
+        min_x = target_indexs[0].min()
+        max_x = target_indexs[0].max()
+        col_list.append([col_num, min_x, max_x])
+        
+    for j in range(len(range_unique)):
+        range_num = range_unique[j]
+        if range_num == 0:
+            continue
+        target_indexs = np.where(img_y_index==range_num)
+        min_x = target_indexs[0].min()
+        max_x = target_indexs[0].max()
+        range_list.append([range_num, min_x, max_x])
+        
+    rel_list = []
+    for col_item in col_list:
+        for range_item in range_list:
+            range_num = int(range_item[0])
+            col_num = int(col_item[0])
+            plotNum = convt.fieldPartition_to_plotNum(range_num, col_num)
+            i_x_min = col_item[1]
+            i_x_max = col_item[2]
+            i_y_min = range_item[1]
+            i_y_max = range_item[2]
+            image_roiBox = [i_x_min, i_x_max, i_y_min, i_y_max]
+            
+            f_x_min = x_a+(image_shape[0]-i_y_max)*field_dist_per_pix
+            f_x_max = x_a+(image_shape[0]-i_y_min)*field_dist_per_pix
+            f_y_min = y_a+(image_shape[1]-i_x_max)*field_dist_per_pix
+            f_y_max = y_a+(image_shape[1]-i_x_min)*field_dist_per_pix
+            field_roiBox = [f_x_min,f_x_max,f_y_min,f_y_max]
+                
+            # add scan shift to y axis
+            field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
+            rel_list.append([range_num, col_num, plotNum, image_roiBox, field_roiBox])
+    
+    return rel_list
+
 def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
+    
+    # find input files
+    metafile, binfile = find_input_files(in_dir)
+    
+    if metafile == [] or binfile == [] :
+        return
+    
+    base_name = os.path.basename(binfile)[:-4]
+    out_npy_path = os.path.join(out_dir, '{}.npy'.format(base_name))
+    out_png_path = os.path.join(out_dir, '{}.png'.format(base_name))
+    #if os.path.isfile(out_npy_path):
+    #   return
+    
+    # parse meta data
+    metadata = lower_keys(load_json(os.path.join(in_dir, metafile)))
+    center_position, scan_time, fov, y_ends = parse_metadata(metadata)
+    
+    if center_position is None:
+        return
+
+    
+    image_shape = (640, 480)
+    
+    # center position/fov/imgSize to plot number, image boundaries, only dominated plot for now
+    try:
+        roi_list = metadata_to_boundsList(center_position, fov, image_shape, y_ends, convt)
+    except ValueError as err:
+        fail('Error metadata_to_imageBoundaries:' + in_dir)
+        return
+    
+    # bin to image
+    raw_data = load_flir_data(binfile)
+    if raw_data is None:
+        return
+    
+    create_png(raw_data, out_png_path) # create colormap png for show
+    
+    # raw to temperature c
+    tc = rawData_to_temperature(raw_data, scan_time, metadata) # get temperature
+    if tc is None:
+        return
+    tc_data = create_npy_tc_data(tc, out_npy_path)
+
+    
+    for roi_item in roi_list:
+        plot_row, plot_col, plotNum, roiBox, field_roiBox = roi_item
+        # save image
+        save_dir = '{0:02d}_{1:02d}_{2:04d}'.format(plot_row, plot_col, plotNum)
+    
+        # crop image
+        roi_data = tc_data[int(roiBox[2]):int(roiBox[3]), int(roiBox[0]):int(roiBox[1])]
+        color_img = cv2.imread(out_png_path)
+        roi_img = color_img[int(roiBox[2]):int(roiBox[3]), int(roiBox[0]):int(roiBox[1])]
+        
+        if roi_img.size ==0 or roi_data.size == 0:
+            continue
+        
+        # save image
+        s_d = os.path.join(plot_dir, save_dir)
+        if not os.path.isdir(s_d):
+            os.mkdir(s_d)
+            
+        c_d = os.path.join(crop_color_dir, save_dir)
+        if not os.path.isdir(c_d):
+            os.mkdir(c_d)
+            
+        time_stamp = os.path.basename(in_dir)
+        dst_npy_path = os.path.join(s_d, '{}.npy'.format(time_stamp))
+        np.save(dst_npy_path, roi_data)
+        dst_png_path = os.path.join(c_d, '{}.png'.format(time_stamp))
+        cv2.imwrite(dst_png_path, roi_img)
+        
+        # write new json file
+        src_json_data = load_json(os.path.join(in_dir, metafile))
+        
+        add_metadata = {'gwu_added_metadata': {'xmin':field_roiBox[0], 'xmax':field_roiBox[1], 'ymin':field_roiBox[2], 'ymax':field_roiBox[3]}}
+        dst_json_data = dict(src_json_data)
+        dst_json_data.update(add_metadata)
+        
+        
+        dst_json_path = os.path.join(s_d, '{}.json'.format(time_stamp))
+        with open(dst_json_path, 'w') as outfile:
+            json.dump(dst_json_data, outfile)
+            
+        dst_json_path = os.path.join(c_d, '{}.json'.format(time_stamp))
+        with open(dst_json_path, 'w') as outfile:
+            json.dump(dst_json_data, outfile)
+    
+    return
+
+def singe_image_process_old_version(in_dir, out_dir, plot_dir, crop_color_dir, convt):
     
     # find input files
     metafile, binfile = find_input_files(in_dir)
@@ -154,7 +321,7 @@ def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
     # add scan shift to y axis
     field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
     
-    save_dir = '{0:02d}_{1:02d}_{2:04d}'.format(plot_row, plot_col, plotNum) 
+    save_dir = '{0:02d}-{1:02d}-{2:04d}'.format(plot_row, plot_col, plotNum) 
     
     # bin to image
     raw_data = load_flir_data(binfile)
@@ -463,7 +630,7 @@ def stitch_plot_thermal_image(in_dir, out_dir, str_date, convt):
     # get plot boundaries
     dir_name = os.path.basename(in_dir)
     
-    plotId = dir_name.split('-')
+    plotId = dir_name.split('_')
     plot_row = int(plotId[0])
     plot_col = int(plotId[1])
     
@@ -667,11 +834,11 @@ def main():
     '''
     print("start...")
     
-    start_date = '2019-05-23'  # S9 start date
-    end_date = '2019-06-04'   # S9 end date
+    start_date = '2020-02-03'  # S9 start date
+    end_date = '2020-02-03'   # S9 end date
     
     convt = terra_common.CoordinateConverter()
-    qFlag = convt.bety_query('2019-06-01') # All plot boundaries in one season should be the same, currently 2019-06-18 works best
+    qFlag = convt.bety_query('2020-02-03') # All plot boundaries in one season should be the same, currently 2019-06-18 works best
     
     if not qFlag:
         return
@@ -684,7 +851,7 @@ def main():
     
     full_season_thermalCrop_frame(in_dir, out_dir, plot_dir, png_dir, start_date, end_date, convt)
     
-    full_season_thermal_stitch(png_dir, stitch_dir, start_date, end_date, convt)
+    #full_season_thermal_stitch(png_dir, stitch_dir, start_date, end_date, convt)
     
     return
 
