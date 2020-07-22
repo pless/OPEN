@@ -16,14 +16,14 @@ import multiprocessing
 import cv2
 import terra_common
 from networkx.algorithms.distance_measures import center
+from pip._vendor.urllib3.util.ssl_ import PROTOCOL_TLS
 
 fov_adj = 0.97
 
 # Test by Baker
 FOV_MAGIC_NUMBER = 0.1552 
 FOV_IN_2_METER_PARAM = 0.837 # since we don't have a true value of field of view in 2 meters, we use this parameter(meter) to estimate fov in Y-
-
-#SEASON_10_SHIFT = 0.2
+SEASON_10_SHIFT = -0.1
 scan_shift = -0.03
 
 os.environ['BETYDB_KEY'] = '9999999999999999999999999999999999999999'
@@ -146,7 +146,7 @@ def parse_metadata(metadata):
 
     except KeyError as err:
         fail('Metadata file missing key: ' + err.args[0])
-        return
+        return None, None
         
     position = [float(gantry_x), float(gantry_y), float(gantry_z)]
     center_position = [position[0]+float(cam_x), position[1]+float(cam_y), position[2]+float(cam_z)]
@@ -243,6 +243,98 @@ def crop_rgb_imageToPlot(in_dir, out_dir, plot_dir, convt):
 
     
     return
+
+def metadata_to_boundsList(center_position, fov, image_shape, y_ends, convt):
+    
+    field_dist_per_pix = fov[1]/image_shape[1]
+    
+    # A: right lower point in the image
+    x_a = center_position[0]-fov[0]/2
+    y_a = center_position[1]-fov[1]/2
+    
+    # B: left upper point in the image
+    x_b = center_position[0]+fov[0]/2
+    y_b = center_position[1]+fov[1]/2
+    
+    img_x_index = np.zeros(image_shape[1])
+    img_y_index = np.zeros(image_shape[0])
+    
+    for i in range(image_shape[1]):
+        field_y_coordinate = y_b - field_dist_per_pix*i
+        field_col = convt.fieldPosition_to_fieldPartition(x_a, field_y_coordinate)[1]
+        img_x_index[i] = field_col
+        
+    for j in range(image_shape[0]):
+        field_x_coordinate = x_b - field_dist_per_pix*j
+        field_range = convt.fieldPosition_to_fieldPartition(field_x_coordinate, y_a)[0]
+        img_y_index[j] = field_range
+        
+    img_x_index.astype('uint16')
+    img_y_index.astype('uint16')
+    
+    col_unique = np.unique(img_x_index)
+    range_unique = np.unique(img_y_index)
+    
+    col_list = []
+    range_list = []
+    
+    for i in range(len(col_unique)):
+        col_num = col_unique[i]
+        if col_num == 0:
+            continue
+        target_indexs = np.where(img_x_index==col_num)
+        min_x = target_indexs[0].min()
+        max_x = target_indexs[0].max()
+        col_list.append([col_num, min_x, max_x])
+        
+    for j in range(len(range_unique)):
+        range_num = range_unique[j]
+        if range_num == 0:
+            continue
+        target_indexs = np.where(img_y_index==range_num)
+        min_x = target_indexs[0].min()
+        max_x = target_indexs[0].max()
+        range_list.append([range_num, min_x, max_x])
+        
+    rel_list = []
+    for col_item in col_list:
+        for range_item in range_list:
+            range_num = int(range_item[0])
+            col_num = int(col_item[0])
+            i_x_min = col_item[1]
+            i_x_max = col_item[2]
+            i_y_min = range_item[1]
+            i_y_max = range_item[2]
+            image_roiBox = [i_x_min, i_x_max, i_y_min, i_y_max]
+            
+            f_x_min = x_a+(image_shape[0]-i_y_max)*field_dist_per_pix
+            f_x_max = x_a+(image_shape[0]-i_y_min)*field_dist_per_pix
+            f_y_min = y_a+(image_shape[1]-i_x_max)*field_dist_per_pix
+            f_y_max = y_a+(image_shape[1]-i_x_min)*field_dist_per_pix
+            field_roiBox = [f_x_min,f_x_max,f_y_min,f_y_max]
+                
+            # add scan shift to y axis
+            #field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
+            
+            # remove roi which is too small
+            if check_if_roi_too_small(field_roiBox):
+                continue
+            
+            rel_list.append([range_num, col_num, image_roiBox, field_roiBox])
+    
+    return rel_list
+
+x_range_length_threshold = 0.4
+y_column_length_thershold = 0.2
+
+def check_if_roi_too_small(field_roiBox):
+    
+    if field_roiBox[1] - field_roiBox[0] < x_range_length_threshold:
+        return True
+    if field_roiBox[3] - field_roiBox[2] < y_column_length_thershold:
+        return True
+
+    return False
 
 def metadata_to_imageBoundaries(center_position, fov, image_shape, convt):
     
@@ -416,6 +508,22 @@ def metadata_to_imageBoundaries_with_gaps(center_position, fov, image_shape, con
     
     return plotNum, roiBox, field_roiBox
 
+def add_season10_shift(center_position, shift_meter):
+    
+    center_position[1] = center_position[1] + shift_meter
+    
+    return center_position
+
+def add_scan_shift(center_position, y_ends):
+    
+    if y_ends == '0':     # + shift
+        center_position[1] = center_position[1]+scan_shift
+    else:               # - shift   
+        center_position[1] = center_position[1]-scan_shift
+        
+    return center_position
+    
+
 def add_scan_shift_to_field_roiBox(field_roiBox, y_ends):
     
     if y_ends == '0':     # + shift
@@ -427,7 +535,7 @@ def add_scan_shift_to_field_roiBox(field_roiBox, y_ends):
         
     return field_roiBox
 
-def singe_image_process(in_dir, out_dir, plot_dir, convt):
+def singe_image_process_old_version(in_dir, out_dir, plot_dir, convt):
     
     time_stamp = os.path.basename(in_dir)
     print(time_stamp)
@@ -473,9 +581,6 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     
     # add scan shift to y axis
     field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
-    
-    plotNum, roiBox, field_roiBox = metadata_to_imageBoundaries(center_position, fov, image_shape, convt)
-    
         
     # bin to image
     try:
@@ -496,7 +601,7 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     roi_img = cv_img[roiBox[0]:roiBox[1], roiBox[2]:roiBox[3]]
     
     # save image
-    save_dir = '{0:02d}_{1:02d}_{2:04d}'.format(plot_row, plot_col, plotNum)
+    save_dir = '{0:02d}-{1:02d}-{2:04d}'.format(plot_row, plot_col, plotNum)
     s_d = os.path.join(plot_dir, save_dir)
     if not os.path.isdir(s_d):
         os.mkdir(s_d)
@@ -520,6 +625,99 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     
     return
 
+def singe_image_process(in_dir, out_dir, plot_dir, convt):
+    
+    time_stamp = os.path.basename(in_dir)
+    
+    # find input files
+    metas, ims_left, ims_right = find_input_files(in_dir)
+    if metas == None:
+        print(in_dir)
+        return
+    
+    if not os.path.isdir(out_dir):
+        os.mkdir(out_dir)
+    
+    base_name = os.path.basename(ims_left[0])[:-4]
+    out_path = os.path.join(out_dir, '{}.png'.format(base_name))
+    #if os.path.isfile(out_path):
+    #    return
+    
+    # parse meta data
+    metadata = lower_keys(load_json(os.path.join(in_dir, metas[0])))
+    center_position, y_ends = parse_metadata(metadata)
+    
+    if center_position == None or y_ends == None:
+        print(in_dir)
+        return
+    
+    # add season 10 shift to center position y
+    if convt.seasonNum == 10:
+        center_position = add_season10_shift(center_position, SEASON_10_SHIFT)
+        
+    # add scan shift to center position y
+    center_position = add_scan_shift(center_position, y_ends)
+    
+    fov = get_fov_formular(metadata, center_position[2])
+    
+    image_shape = (3296, 2472)
+    
+    # center position/fov/imgSize to plot number, image boundaries, only dominated plot for now
+    try:
+        roi_list = metadata_to_boundsList(center_position, fov, image_shape, y_ends, convt)
+    except ValueError as err:
+        fail('Error metadata_to_imageBoundaries:' + in_dir)
+        return
+    
+    # bin to image
+    try:
+        im = np.fromfile(join(in_dir, ims_left[0]), dtype='uint8').reshape(image_shape[::-1])
+    except ValueError as err:
+        fail('Error bin to image: ' + err.args[0])
+        print(in_dir)
+        return
+    
+    im_color = demosaic(im)
+    im_color = (np.rot90(im_color))
+
+    Image.fromarray(im_color).save(out_path)
+
+    
+    # crop image
+    cv_img = im_color
+    #im_color = cv2.cvtColor(im_color, cv2.COLOR_BGR2RGB)
+    for roi_item in roi_list:
+        plot_row, plot_col, roiBox, field_roiBox = roi_item
+    
+        roi_img = cv_img[roiBox[2]:roiBox[3], roiBox[0]:roiBox[1]]
+        
+        if roi_img.size ==0:
+            continue
+    
+        # save image
+        save_dir = '{0:02d}_{1:02d}'.format(plot_row, plot_col)
+        s_d = os.path.join(plot_dir, save_dir)
+        if not os.path.isdir(s_d):
+            os.mkdir(s_d)
+            
+        dst_img_path = os.path.join(s_d, '{}.png'.format(time_stamp))
+        save_img = cv2.cvtColor(roi_img, cv2.COLOR_BGR2RGB)
+        cv2.imwrite(dst_img_path, save_img)
+    
+        # write new json file
+        src_json_data = load_json(os.path.join(in_dir, metas[0]))
+        
+        add_metadata = {'gwu_added_metadata': {'xmin':field_roiBox[0], 'xmax':field_roiBox[1], 'ymin':field_roiBox[2], 'ymax':field_roiBox[3]}}
+        dst_json_data = dict(src_json_data)
+        dst_json_data.update(add_metadata)
+        
+        
+        dst_json_path = os.path.join(s_d, '{}.json'.format(time_stamp))
+        with open(dst_json_path, 'w') as outfile:
+            json.dump(dst_json_data, outfile)
+    
+    return
+
 
 def extract_roiBox_from_metadata(metadata):
     
@@ -538,7 +736,7 @@ def stitch_plot_rgb_image(in_dir, out_dir, str_date, convt):
         
     # get plot boundaries
     dir_name = os.path.basename(in_dir)
-    plotId = dir_name.split('-')
+    plotId = dir_name.split('_')
     plot_row = int(plotId[0])
     plot_col = int(plotId[1])
     
@@ -610,7 +808,7 @@ def stitch_plot_rgb_image(in_dir, out_dir, str_date, convt):
 
 def test():
     
-    str_date = '2019-06-18'
+    str_date = '2020-02-03'
     
     in_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/stereoTop/', str_date)
     out_dir = os.path.join('/media/zli/Seagate Backup Plus Drive/OPEN/ua-mac/Level_2/StitchedPlotRGB', str_date)
@@ -725,11 +923,11 @@ def full_season_rgb_stitch(png_dir, stitch_dir, start_date, end_date, convt):
     return
 
 def main():
-    start_date = '2019-06-10'  # S9 start date
-    end_date = '2019-06-20'   # S9 end date
+    start_date = '2020-02-03'  # S9 start date
+    end_date = '2020-02-03'   # S9 end date
     
     convt = terra_common.CoordinateConverter()
-    qFlag = convt.bety_query('2019-06-18') # All plot boundaries in one season should be the same, currently 2019-06-18 works best
+    qFlag = convt.bety_query('2020-02-03') # All plot boundaries in one season should be the same, currently 2019-06-18 works best
     
     if not qFlag:
         return
