@@ -36,58 +36,85 @@ class calibParam:
         self.calibrationX = 0.0
         self.calibrationb1 = 0.0
         self.calibrationb2 = 0.0
-        
+        self.shuttertemperature = 0.0
+
+
 # convert flir raw data into temperature C degree, for date after September 15th
+# code converted from Matlab https://github.com/terraref/computing-pipeline/blob/master/scripts/FLIR/FlirRawToTemperature.m
 def flirRawToTemperature(rawData, calibP):
-    
-    R = calibP.calibrationR
-    B = calibP.calibrationB
-    F = calibP.calibrationF
-    J0 = calibP.calibrationJ0
-    J1 = calibP.calibrationJ1
-    
+
+    # Constant camera-specific parameters determined by FLIR
+    # Plank constant - Flir
+    R = calibP.calibrationR  # function of integration time and wavelength
+    B = calibP.calibrationB  # function of wavelength
+    F = calibP.calibrationF  # positive value (0 - 1)
+    J0 = calibP.calibrationJ0  # global offset
+    J1 = calibP.calibrationJ1 # global gain
+
+    # Constant Atmospheric transmission parameter by Flir
     X = calibP.calibrationX
     a1 = calibP.calibrationa1
     b1 = calibP.calibrationb1
     a2 = calibP.calibrationa2
     b2 = calibP.calibrationb2
-    
+
+    # Constant for VPD computation (sqtrH2O)
     H2O_K1 = 1.56
     H2O_K2 = 0.0694
     H2O_K3 = -0.000278
     H2O_K4 = 0.000000685
-    
-    H = 0.1
-    T = 22.0
-    D = 2.5
-    E = 0.98
-    
-    K0 = 273.15
-    
+
+    K0 = 273.15  # Kelvin to Celsius temperature constant
+
+    # Environmental factors
+    H = 0.1  # Relative Humidity from the gantry  (0 - 1)
+    T = calibP.shuttertemperature - K0 # air temperature in degree Celsius from the gantry
+    D = 2.5  # ObjectDistance - camera/canopy (m)
+    E = 0.98  # bject emissivity, vegetation is around 0.98, bare soil around 0.93...
+
     im = rawData
-        
+
     AmbTemp = T + K0
     AtmTemp = T + K0
-        
+
+    # Step 1: Atmospheric transmission - correction factor from air temp, relative humidity and distance sensor-object;
+    # Vapour pressure deficit call here sqrtH2O => convert relative humidity and air temperature in VPD - mmHg - 1mmHg=0.133 322 39 kPa
     H2OInGperM2 = H*math.exp(H2O_K1 + H2O_K2*T + H2O_K3*math.pow(T, 2) + H2O_K4*math.pow(T, 3))
+    # Atmospheric transmission correction: tao
     a1b1sqH2O = (a1+b1*math.sqrt(H2OInGperM2))
     a2b2sqH2O = (a2+b2*math.sqrt(H2OInGperM2))
     exp1 = math.exp(-math.sqrt(D/2)*a1b1sqH2O)
     exp2 = math.exp(-math.sqrt(D/2)*a2b2sqH2O)
         
-    tao = X*exp1 + (1-X)*exp2
-        
-    obj_rad = im*E*tao
-        
+    tao = X*exp1 + (1-X)*exp2  # Atmospheric transmission factor
+
+    # Step2: Correct raw pixel values from external factors
+    # General equation : Total Radiation = Object Radiation + Atmosphere Radiation + Ambient Reflection Radiation
+
+    # Object Radiation: obj_rad
+    # obj_rad = Theoretical object radiation * emissivity * atmospheric transmission
+    obj_rad = im*E*tao  # For each pixel
+
+    # Theoretical atmospheric radiation: theo_atm_rad
     theo_atm_rad = (R*J1/(math.exp(B/AtmTemp)-F)) + J0
+
+    # Atmosphere Radiation: atm_rad
+    # atm_rad = (1 - atmospheric transmission) * Theoretical atmospheric radiation
     atm_rad = repmat((1-tao)*theo_atm_rad, 480, 640)
-        
+
+    # Theoretical Ambient Reflection Radiation: theo_amb_refl_rad
     theo_amb_refl_rad = (R*J1/(math.exp(B/AmbTemp)-F)) + J0
+
+    # Ambient Reflection Radiation: amb_refl_rad
+    # amb_refl_rad = (1 - emissivity) * atmospheric transmission * Theoretical Ambient Reflection Radiation
     amb_refl_rad = repmat((1-E)*tao*theo_amb_refl_rad, 480, 640)
-        
+
+    # Total Radiation: corr_pxl_val
     corr_pxl_val = obj_rad + atm_rad + amb_refl_rad
-        
-    pxl_temp = B/np.log(R/(corr_pxl_val-J0)*J1+F) - K0
+
+    # Step 3:RBF equation: transformation of pixel intensity in radiometric temperature from raw values or
+    # corrected values (in degree Celsius)
+    pxl_temp = B/np.log(R/(corr_pxl_val-J0)*J1+F) - K0  # for each pixel
     
     return pxl_temp
 
@@ -195,7 +222,6 @@ def metadata_to_boundsList(center_position, fov, image_shape, y_ends, convt):
     return rel_list
 
 def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
-    
     # find input files
     metafile, binfile = find_input_files(in_dir)
     
@@ -306,7 +332,6 @@ def singe_image_process_old_version(in_dir, out_dir, plot_dir, crop_color_dir, c
     if center_position is None:
         return
 
-    
     image_shape = (640, 480)
     
     # center position/fov/imgSize to plot number, image boundaries, only dominated plot for now
@@ -336,7 +361,6 @@ def singe_image_process_old_version(in_dir, out_dir, plot_dir, crop_color_dir, c
         return
     tc_data = create_npy_tc_data(tc, out_npy_path)
 
-    
     # crop image
     roi_data = tc_data[int(roiBox[0]):int(roiBox[1]), int(roiBox[2]):int(roiBox[3])]
     color_img = cv2.imread(out_png_path)
@@ -383,7 +407,7 @@ def add_scan_shift_to_field_roiBox(field_roiBox, y_ends):
     else:               # - shift   
         field_roiBox[2] = field_roiBox[2]-scan_shift
         field_roiBox[3] = field_roiBox[3]-scan_shift
-        
+
     return field_roiBox
 
 def rawData_to_temperature(rawData, scan_time, metadata):
@@ -401,11 +425,12 @@ def rawData_to_temperature(rawData, scan_time, metadata):
     except Exception as ex:
         fail('raw to temperature fail:' + str(ex))
         return
-        
+
 def get_calibrate_param(metadata):
     
     try:
         sensor_fixed_meta = metadata['lemnatec_measurement_metadata']['sensor_fixed_metadata']
+        sensor_variable_meta =  metadata['lemnatec_measurement_metadata']['sensor_variable_metadata']
         calibrated = sensor_fixed_meta['is calibrated']
         calibparameter = calibParam()
         if calibrated == 'True':
@@ -422,9 +447,8 @@ def get_calibrate_param(metadata):
             calibparameter.calibrationX = float(sensor_fixed_meta['calibration x'])
             calibparameter.calibrationb1 = float(sensor_fixed_meta['calibration beta1'])
             calibparameter.calibrationb2 = float(sensor_fixed_meta['calibration beta2'])
-            
+            calibparameter.shuttertemperature = float(sensor_variable_meta['shutter_temperature_[K]'])
             return calibparameter
-        
 
     except KeyError as err:
         return calibParam()
@@ -513,7 +537,7 @@ def load_flir_data(file_path):
     except Exception as ex:
         fail('Error loading bin file' + str(ex))
         return
-        
+
 def create_png(im, outfile_path):
     
     Gmin = im.min()
@@ -866,7 +890,8 @@ def test(convt, str_date):
     
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
-    
+
+
     list_dirs = os.listdir(in_dir)
     
     for d in list_dirs:
