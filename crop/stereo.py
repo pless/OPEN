@@ -23,8 +23,7 @@ fov_adj = 0.97
 # Test by Baker
 FOV_MAGIC_NUMBER = 0.1552 
 FOV_IN_2_METER_PARAM = 0.837 # since we don't have a true value of field of view in 2 meters, we use this parameter(meter) to estimate fov in Y-
-
-#SEASON_10_SHIFT = 0.2
+SEASON_10_SHIFT = -0.1
 scan_shift = -0.03
 
 os.environ['BETYDB_KEY'] = '9999999999999999999999999999999999999999'
@@ -147,7 +146,7 @@ def parse_metadata(metadata):
 
     except KeyError as err:
         fail('Metadata file missing key: ' + err.args[0])
-        return
+        return None, None
         
     position = [float(gantry_x), float(gantry_y), float(gantry_z)]
     center_position = [position[0]+float(cam_x), position[1]+float(cam_y), position[2]+float(cam_z)]
@@ -302,7 +301,6 @@ def metadata_to_boundsList(center_position, fov, image_shape, y_ends, convt):
         for range_item in range_list:
             range_num = int(range_item[0])
             col_num = int(col_item[0])
-            plotNum = convt.fieldPartition_to_plotNum(range_num, col_num)
             i_x_min = col_item[1]
             i_x_max = col_item[2]
             i_y_min = range_item[1]
@@ -316,10 +314,27 @@ def metadata_to_boundsList(center_position, fov, image_shape, y_ends, convt):
             field_roiBox = [f_x_min,f_x_max,f_y_min,f_y_max]
                 
             # add scan shift to y axis
-            field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
-            rel_list.append([range_num, col_num, plotNum, image_roiBox, field_roiBox])
+            #field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
+            
+            # remove roi which is too small
+            if check_if_roi_too_small(field_roiBox):
+                continue
+            
+            rel_list.append([range_num, col_num, image_roiBox, field_roiBox])
     
     return rel_list
+
+x_range_length_threshold = 0.4
+y_column_length_thershold = 0.2
+
+def check_if_roi_too_small(field_roiBox):
+    
+    if field_roiBox[1] - field_roiBox[0] < x_range_length_threshold:
+        return True
+    if field_roiBox[3] - field_roiBox[2] < y_column_length_thershold:
+        return True
+
+    return False
 
 def metadata_to_imageBoundaries(center_position, fov, image_shape, convt):
     
@@ -493,6 +508,22 @@ def metadata_to_imageBoundaries_with_gaps(center_position, fov, image_shape, con
     
     return plotNum, roiBox, field_roiBox
 
+def add_season10_shift(center_position, shift_meter):
+    
+    center_position[1] = center_position[1] + shift_meter
+    
+    return center_position
+
+def add_scan_shift(center_position, y_ends):
+    
+    if y_ends == '0':     # + shift
+        center_position[1] = center_position[1]+scan_shift
+    else:               # - shift   
+        center_position[1] = center_position[1]-scan_shift
+        
+    return center_position
+    
+
 def add_scan_shift_to_field_roiBox(field_roiBox, y_ends):
     
     if y_ends == '0':     # + shift
@@ -597,7 +628,6 @@ def singe_image_process_old_version(in_dir, out_dir, plot_dir, convt):
 def singe_image_process(in_dir, out_dir, plot_dir, convt):
     
     time_stamp = os.path.basename(in_dir)
-    print(time_stamp)
     
     # find input files
     metas, ims_left, ims_right = find_input_files(in_dir)
@@ -617,9 +647,17 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     metadata = lower_keys(load_json(os.path.join(in_dir, metas[0])))
     center_position, y_ends = parse_metadata(metadata)
     
-    if center_position == None:
+    if center_position == None or y_ends == None:
         print(in_dir)
         return
+    
+    # add season 10 shift to center position y
+    if convt.seasonNum == 10:
+        center_position = add_season10_shift(center_position, SEASON_10_SHIFT)
+        
+    # add scan shift to center position y
+    center_position = add_scan_shift(center_position, y_ends)
+    
     fov = get_fov_formular(metadata, center_position[2])
     
     image_shape = (3296, 2472)
@@ -630,7 +668,7 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     except ValueError as err:
         fail('Error metadata_to_imageBoundaries:' + in_dir)
         return
-       
+    
     # bin to image
     try:
         im = np.fromfile(join(in_dir, ims_left[0]), dtype='uint8').reshape(image_shape[::-1])
@@ -649,7 +687,7 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
     cv_img = im_color
     #im_color = cv2.cvtColor(im_color, cv2.COLOR_BGR2RGB)
     for roi_item in roi_list:
-        plot_row, plot_col, plotNum, roiBox, field_roiBox = roi_item
+        plot_row, plot_col, roiBox, field_roiBox = roi_item
     
         roi_img = cv_img[roiBox[2]:roiBox[3], roiBox[0]:roiBox[1]]
         
@@ -657,7 +695,7 @@ def singe_image_process(in_dir, out_dir, plot_dir, convt):
             continue
     
         # save image
-        save_dir = '{0:02d}_{1:02d}_{2:04d}'.format(plot_row, plot_col, plotNum)
+        save_dir = '{0:02d}_{1:02d}'.format(plot_row, plot_col)
         s_d = os.path.join(plot_dir, save_dir)
         if not os.path.isdir(s_d):
             os.mkdir(s_d)
@@ -902,7 +940,7 @@ def main():
     
     full_season_crop_rgb(raw_dir, out_dir, plot_dir, start_date, end_date, convt)
     
-    #full_season_rgb_stitch(plot_dir, stitch_dir, start_date, end_date, convt)
+    full_season_rgb_stitch(plot_dir, stitch_dir, start_date, end_date, convt)
 
 
 if __name__ == '__main__':

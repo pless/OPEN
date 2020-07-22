@@ -20,6 +20,7 @@ import cv2
 #fov_alpha = 1.03 # 05-19
 fov_alpha = 1.12
 scan_shift = -0.03
+SEASON_10_SHIFT = 0
 
 os.environ['BETYDB_KEY'] = '9999999999999999999999999999999999999999'
 
@@ -202,7 +203,6 @@ def metadata_to_boundsList(center_position, fov, image_shape, y_ends, convt):
         for range_item in range_list:
             range_num = int(range_item[0])
             col_num = int(col_item[0])
-            plotNum = convt.fieldPartition_to_plotNum(range_num, col_num)
             i_x_min = col_item[1]
             i_x_max = col_item[2]
             i_y_min = range_item[1]
@@ -216,10 +216,39 @@ def metadata_to_boundsList(center_position, fov, image_shape, y_ends, convt):
             field_roiBox = [f_x_min,f_x_max,f_y_min,f_y_max]
                 
             # add scan shift to y axis
-            field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
-            rel_list.append([range_num, col_num, plotNum, image_roiBox, field_roiBox])
+            #field_roiBox = add_scan_shift_to_field_roiBox(field_roiBox, y_ends)
+            if check_if_roi_too_small(field_roiBox):
+                continue
+            rel_list.append([range_num, col_num, image_roiBox, field_roiBox])
     
     return rel_list
+
+x_range_length_threshold = 0.4
+y_column_length_thershold = 0.2
+
+def check_if_roi_too_small(field_roiBox):
+    
+    if field_roiBox[1] - field_roiBox[0] < x_range_length_threshold:
+        return True
+    if field_roiBox[3] - field_roiBox[2] < y_column_length_thershold:
+        return True
+
+    return False
+
+def add_season10_shift(center_position, shift_meter):
+    
+    center_position[1] = center_position[1] + shift_meter
+    
+    return center_position
+
+def add_scan_shift(center_position, y_ends):
+    
+    if y_ends == '0':     # + shift
+        center_position[1] = center_position[1]+scan_shift
+    else:               # - shift   
+        center_position[1] = center_position[1]-scan_shift
+        
+    return center_position
 
 def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
     # find input files
@@ -241,6 +270,12 @@ def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
     if center_position is None:
         return
 
+    # add season 10 shift to center position y
+    if convt.seasonNum == 10:
+        center_position = add_season10_shift(center_position, SEASON_10_SHIFT)
+        
+    # add scan shift to center position y
+    center_position = add_scan_shift(center_position, y_ends)
     
     image_shape = (640, 480)
     
@@ -266,9 +301,9 @@ def singe_image_process(in_dir, out_dir, plot_dir, crop_color_dir, convt):
 
     
     for roi_item in roi_list:
-        plot_row, plot_col, plotNum, roiBox, field_roiBox = roi_item
+        plot_row, plot_col, roiBox, field_roiBox = roi_item
         # save image
-        save_dir = '{0:02d}_{1:02d}_{2:04d}'.format(plot_row, plot_col, plotNum)
+        save_dir = '{0:02d}_{1:02d}'.format(plot_row, plot_col)
     
         # crop image
         roi_data = tc_data[int(roiBox[2]):int(roiBox[3]), int(roiBox[0]):int(roiBox[1])]
@@ -875,7 +910,7 @@ def main():
     
     full_season_thermalCrop_frame(in_dir, out_dir, plot_dir, png_dir, start_date, end_date, convt)
     
-    #full_season_thermal_stitch(png_dir, stitch_dir, start_date, end_date, convt)
+    full_season_thermal_stitch(png_dir, stitch_dir, start_date, end_date, convt)
     
     return
 
