@@ -146,3 +146,16 @@ dependencies:
   - xz=5.2.4
   - zlib=1.2.11
   - zstd=1.4.0
+  - pip:
+    - asn1crypto==0.24.0
+    - cffi==1.12.3
+    - chardet==3.0.4
+    - cryptography==2.7
+    - globus-sdk==1.8.0
+    - idna==2.8
+    - pycparser==2.19
+    - pyjwt==1.7.1
+    - requests==2.22.0
+    - urllib3==1.25.3
+prefix: /SEAS/home/zeyu/miniconda3/envs/terraref
+
