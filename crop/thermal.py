@@ -402,6 +402,7 @@ def singe_image_process_old_version(in_dir, out_dir, plot_dir, crop_color_dir, c
     roi_img = color_img[int(roiBox[0]):int(roiBox[1]), int(roiBox[2]):int(roiBox[3])]
     
     # save image
+    save_dir = '{}_{}_{}'.format(plot_row, plot_col, plotNum)
     s_d = os.path.join(plot_dir, save_dir)
     if not os.path.isdir(s_d):
         os.mkdir(s_d)
@@ -669,7 +670,7 @@ def find_input_files(in_dir):
 
 
 def fail(reason):
-    print (sys.stderr, reason)
+    print(sys.stderr, reason)
     
 def extract_roiBox_from_metadata(metadata):
     

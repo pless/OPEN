@@ -80,6 +80,66 @@ def stereo_crop(cc=None):
         pass
 
 @unpack
+def thermal_singe_image_process(*args, **kwargs):
+        crop.thermal.singe_image_process(*args, **kwargs)
+
+def thermal_crop(cc=None):
+    logger = logging.getLogger('thermal_crop_ppln_main')
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s: \t%(message)s')
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    logger.info('\n\t raw data path: {}'
+                '\n\t output path: {} '
+                '\n\t start date: {}'
+                '\n\t end date: {}'
+                '\n\t number of processes: {}'
+                .format(args.raw_path, args.out_path, args.start, args.end, args.processes))
+    # TODO load a cc and dump to some where for cache
+    if cc is None:
+        cc = CC()
+        cc.bety_query(args.start)
+    start_date = datetime.strptime(args.start, '%Y-%m-%d')
+    end_date = datetime.strptime(args.end, '%Y-%m-%d')
+
+    # TODO check folder existence
+    if not os.path.isdir(args.lv1_path):
+        os.makedirs(args.lv1_path)
+    if not os.path.isdir(args.out_path):
+        os.makedirs(args.out_path)
+    logger.info('scanning folders')
+    task_list = []
+    result_json_file_list = glob.glob(os.path.join(args.out_path, '**', '*.json'))
+    timestamp_set = set([os.path.splitext(os.path.basename(f))[0] for f in result_json_file_list])
+    total_task_count = 0
+    skipped_count = 0
+    for date_folder in os.listdir(args.raw_path):
+        folder_date = datetime.strptime(date_folder, '%Y-%m-%d')
+        if folder_date < start_date or folder_date > end_date:
+            continue
+        raw_date_folder_path = os.path.join(args.raw_path, date_folder)
+        for sub_folder in os.listdir(raw_date_folder_path):
+            total_task_count += 1
+            # task format: raw_data_folder, ply_data_folder, output_folder,
+            #              sensor_name='east', download_ply=False, per_plot=True, log_lv=logging.DEBUG):
+            if sub_folder in timestamp_set:
+                skipped_count += 1
+                continue
+            task_raw_path = os.path.join(raw_date_folder_path, sub_folder)
+            task = (task_raw_path, args.lv1_path, args.out_path, args.out_path, cc)
+            task_list.append(task)
+    logger.info('total task: {}'.format(total_task_count))
+    if skipped_count != 0:
+        logger.info('task skipped: {}'.format(skipped_count))
+    pool = Pool(processes=args.processes)
+    #for _ in pool.imap_unordered(singe_image_process, task_list):
+    #    pass
+    for _ in tqdm(pool.imap_unordered(thermal_singe_image_process, task_list), total=total_task_count, initial=skipped_count):
+        pass
+
+@unpack
 def scanner3d_singe_image_process(*args, **kwargs):
         crop.scanner3d.scanner3d_single_crop(*args, **kwargs)
 
@@ -150,6 +210,12 @@ def parse_args():
     parser_stereo.add_argument('--lv1-path', help='path to the Level 1 data (out_dir)', required=True)
     parser_stereo.add_argument('--out-path', help='path to the output folder (plot_dir)', required=True)
     parser_stereo.set_defaults(crop_func=stereo_crop)
+
+    parser_stereo = subparsers.add_parser('thermal', help='FLIR thermal image crop')
+    parser_stereo.add_argument('--raw-path', help='path to the root of raw data', required=True)
+    parser_stereo.add_argument('--lv1-path', help='path to the Level 1 data (out_dir)', required=True)
+    parser_stereo.add_argument('--out-path', help='path to the output folder (plot_dir)', required=True)
+    parser_stereo.set_defaults(crop_func=thermal_crop)
 
     parser_scanner3d = subparsers.add_parser('scanner3d', help='scanner3DTop')
     parser_scanner3d.add_argument('--raw-path', help='path to the root of raw data', required=True)
