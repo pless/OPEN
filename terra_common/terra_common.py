@@ -5,6 +5,7 @@ Created on Sep 6, 2016
 '''
 import json, sys, utm, re
 import numpy as np
+import pandas as pd
 from datetime import datetime
 from math import cos, pi
 from .terrautils.betydb import get_site_boundaries
@@ -193,6 +194,18 @@ class CoordinateConverter(object):
         
         return True
     
+    def file_query(self, file_path):
+        boundary_df = pd.read_csv(file_path)
+        boundary_df['range'] = boundary_df['range'].astype(int)
+        boundary_df['column'] = boundary_df['column'].astype(int)
+        self.max_range = boundary_df['range'].max()
+        self.max_col = boundary_df['column'].max()
+        self.np_bounds = np.zeros([self.max_range, self.max_col, 4])
+        for idx, row in boundary_df.iterrows():
+            self.np_bounds[int(row['range'])-1 , int(row['column'])-1] = \
+            row[['x_start', 'x_end', 'y_start', 'y_end']].values
+        pass
+
     def parse_bety_plots(self):
         
         for item in self.plots:

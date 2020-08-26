@@ -227,13 +227,20 @@ def parse_args():
     parser.add_argument('--end', metavar='yyyy-mm-dd', help='End date. Format: yyyy-mm-dd', required=True)
     parser.add_argument('-p', '--processes', help='number of sub-processes', default=4, type=int)
     parser.add_argument('--coord-converter', help='path to the pickled cc', default=None, type=str)
+    parser.add_argument('--boundary-file', help='path to the boundary csv file', default=None, type=str)
 
     args = parser.parse_args()
     return args
 cc = None
 args = parse_args()
+if args.coord_converter is not None and args.boundary_file is not None:
+    raise ValueError('Argument coord-converter and boundary-file can not be set at same time!')
 if args.coord_converter is not None:
     cc_file_name = args.coord_converter
     with open(cc_file_name, 'rb') as f:
         cc = pickle.load(f)
+if args.boundary_file is not None:
+    print('reading boundary information from {}'.format(args.boundary_file))
+    cc = CC()
+    cc.file_query(args.boundary_file)
 args.crop_func(cc=cc)
