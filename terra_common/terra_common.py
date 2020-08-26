@@ -204,7 +204,7 @@ class CoordinateConverter(object):
         for idx, row in boundary_df.iterrows():
             self.np_bounds[int(row['range'])-1 , int(row['column'])-1] = \
             row[['x_start', 'x_end', 'y_start', 'y_end']].values
-        pass
+        self.queryStatus = True
 
     def parse_bety_plots(self):
         
