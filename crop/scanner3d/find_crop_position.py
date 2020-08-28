@@ -52,10 +52,11 @@ def find_crop_position(raw_data_folder, ply_data_folder, output_folder, cc, log_
     east_ply_data_path = None
     west_ply_data_path = None
     for filename in os.listdir(ply_data_folder):
-        if 'east' in filename:
-            east_ply_data_path = os.path.expanduser(os.path.join(ply_data_folder, filename))
-        if 'west' in filename:
-            west_ply_data_path = os.path.expanduser(os.path.join(ply_data_folder, filename))
+        if filename.endswith('.ply'):
+            if 'east' in filename:
+                east_ply_data_path = os.path.expanduser(os.path.join(ply_data_folder, filename))
+            if 'west' in filename:
+                west_ply_data_path = os.path.expanduser(os.path.join(ply_data_folder, filename))
     if east_ply_data_path is None or west_ply_data_path is None:
         logger.error('ply file does not exist. path:{}'.format(ply_data_folder))
         return -1
