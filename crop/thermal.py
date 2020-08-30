@@ -21,6 +21,7 @@ import cv2
 fov_alpha = 1.12
 scan_shift = -0.03
 SEASON_10_SHIFT = 0
+date_start = '0000-00-00'
 
 os.environ['BETYDB_KEY'] = '9999999999999999999999999999999999999999'
 
@@ -58,6 +59,23 @@ def flirRawToTemperature(rawData, calibP):
     b1 = calibP.calibrationb1
     a2 = calibP.calibrationa2
     b2 = calibP.calibrationb2
+
+    # replace the above parameters for season 10
+    season_10_date = '2019-12-05'
+    deltaD = datetime.strptime(date_start, '%Y-%m-%d').date() - datetime.strptime(season_10_date, '%Y-%m-%d').date()
+    if deltaD.days >= 0:
+        # we are processing season 10 data
+        R = 16923.6
+        B = 1434.6
+        F = 1
+        J0 = 4124
+        J1 = 70.0704
+
+        X = 1.9
+        a1 = 0.006569
+        b1 = -0.002276
+        a2 = 0.01262
+        b2 = -0.00667
 
     # Constant for VPD computation (sqtrH2O)
     H2O_K1 = 1.56
@@ -805,6 +823,7 @@ def full_season_thermalCrop_frame(in_dir, out_dir, plot_dir, png_dir, start_date
     
     # initialize data structure
     d0 = datetime.strptime(start_date, '%Y-%m-%d').date()
+    date_start = start_date
     d1 = datetime.strptime(end_date, '%Y-%m-%d').date()
     deltaDay = d1 - d0
     
@@ -847,6 +866,7 @@ def full_season_thermal_stitch(png_dir, stitch_dir, start_date, end_date, convt)
     
     # initialize data structure
     d0 = datetime.strptime(start_date, '%Y-%m-%d').date()
+    date_start = start_date
     d1 = datetime.strptime(end_date, '%Y-%m-%d').date()
     deltaDay = d1 - d0
     
