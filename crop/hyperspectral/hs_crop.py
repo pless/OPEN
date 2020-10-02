@@ -235,8 +235,6 @@ def save_image(rgb, out_path, plot_row, plot_col, plot_num, timestamp):
     print("saving image: ", out_rgb)
     out_img.save(out_rgb)
 
-
-
 def find_crop_position(raw_filepath, cc):
 
     print("Finding plot crop positions")
@@ -281,15 +279,16 @@ def find_crop_position(raw_filepath, cc):
 
     return crop_positions, x_map, y_map
 
-def process_VNIR(raw_filepath):
+def process_VNIR(raw_filepath, nc_calib):
 
 
 # this should work for TERRA Season 9 VNIR data
 # For a raw scan file given as a path input raw_filepath the output is:
-#   1. PCA reduction of the calibrate spectra at the plot level data as a numpy
+#   1. PCA reduction of the calibrate spectra at the plot level data as a h5
 #   2. Plot boundaries in field coordinates (json info),
 #   3. plot image RGB crop, and
-#   4. TODO: geojson for each plot?
+#   4. geojson for each plot?
+#   5. TODO: optional plot level calibrated nc file
 
 # ----- Read raw data -----
     # get necessary paths from path to _raw file
@@ -474,7 +473,7 @@ def process_VNIR(raw_filepath):
         save_image(rgb, out_path, plot_row, plot_col, plot_num, timestamp)
         # should save UBig S V dataSize maxError MSE
 
-        out_h5 = os.path.join(out_path, "%s_%s_%s_%s.h5" % (int(plot_row), int(plot_col), int(plot_num), timestamp))
+        out_h5 = os.path.join(out_path, "%s_%s/%s.h5" % (int(plot_row), int(plot_col), timestamp))
         h5f = h5py.File(out_h5, 'w')
         h5f.create_dataset('UBig', data=UBig, dtype='<f4')
         h5f.create_dataset('S', data=Sigma, dtype='<f4')
@@ -505,13 +504,12 @@ def process_VNIR(raw_filepath):
         dst_json_data = dict(img_meta_data)
         dst_json_data.update(add_metadata)
 
-        dst_json_path = os.path.join(out_path, "%s_%s_%s_%s.json" % (int(plot_row), int(plot_col), int(plot_num), timestamp))
+        dst_json_path = os.path.join(out_path, "%s_%s/%s.json" % (int(plot_row), int(plot_col), timestamp))
         with open(dst_json_path, 'w') as outfile:
             json.dump(dst_json_data, outfile, sort_keys=True, indent=4)
 
         # generate geojson
-        out_gjson_path = os.path.join(out_path,
-                                     "%s_%s_%s_%s.geojson" % (int(plot_row), int(plot_col), int(plot_num), timestamp))
+        out_gjson_path = os.path.join(out_path, "%s_%s/%s.geojson" % (int(plot_row), int(plot_col), timestamp))
 
         bounding_box_to_geographic(x_min, x_max, y_min, y_max, out_gjson_path)
 
