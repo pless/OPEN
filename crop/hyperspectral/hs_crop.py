@@ -173,6 +173,37 @@ def max_range(seq, value):
     position = np.argwhere(seq == value)
     return position.min(), position.max() + 1
 
+def generate_geojson(SE, SW, NE, NW):
+    # Create a geojson file for viewing e.g. in QGIS
+    return {
+        "type": "Polygon",
+        "coordinates": [[
+            [NE[1], NE[0]],
+            [NW[1], NW[0]],
+            [SW[1], SW[0]],
+            [SE[1], SE[0]],
+            [NE[1], NE[0]]  # repeat final coordinate
+        ]]
+    }
+
+def bounding_box_to_geographic(x_min, x_max, y_min, y_max, out_path):
+
+    LATITUDE_TO_METER = 1 / (30.80716 * 3600)
+    LONGITUDE_TO_METER = 1 / (25.906 * 3600)  # varies, but has been corrected based on the actual location of the field
+
+    # hardcoded from the reference point shape file
+    origin_x = 33.074543
+    origin_y = -111.97479
+
+    SE = (x_min * LATITUDE_TO_METER + origin_x, -(y_min) * LONGITUDE_TO_METER + origin_y)
+    SW = (x_min * LATITUDE_TO_METER + origin_x, -(y_max) * LONGITUDE_TO_METER + origin_y)
+    NE = (x_max * LATITUDE_TO_METER + origin_x, -(y_min) * LONGITUDE_TO_METER + origin_y)
+    NW = (x_max * LATITUDE_TO_METER + origin_x, -(y_max) * LONGITUDE_TO_METER + origin_y)
+
+    j_bbox = generate_geojson(SE, SW, NE, NW)
+
+    with open(out_path, 'w') as shpfile:
+        json.dump(j_bbox, shpfile)
 
 def rotate_band(band, scan_dir):
 
@@ -455,22 +486,21 @@ def process_VNIR(raw_filepath):
 
         # write new json file
 
-        # field coordinates
+        # field coordinates (range) x ones should not change
+        x_min = float(x_map[0])
+        x_max = float(x_map[-1])
+        y_box_1 = float(y_map[col_range[0]])
+        y_box_2 = float(y_map[col_range[1]-1])
 
-        y_box_1 = y_map[col_range[0]]
-        y_box_2 = y_map[col_range[1]-1]
 
         if y_box_1 > y_box_2:
-            add_metadata = {
-                'gwu_added_metadata[m]': {'xmin': float(x_map[0]), 'xmax': float(x_map[-1]), 'ymin': float(y_box_2),
-                                           'ymax': float(y_box_1)}}
-
+            y_min = y_box_2
+            y_max = y_box_1
         else:
-            add_metadata = {
-                'gwu_added_metadata[m]': {'xmin': float(x_map[0]), 'xmax': float(x_map[-1]), 'ymin': float(y_box_1),
-                                          'ymax': float(y_box_2)}}
+            y_min = y_box_1
+            y_max = y_box_2
 
-
+        add_metadata = {'field_box_meters': {'xmin': x_min, 'xmax': x_max, 'ymin': y_min, 'ymax': y_max}}
         # copy all the original json metadata in the plot json along with the plot boundary in field coordinates
         dst_json_data = dict(img_meta_data)
         dst_json_data.update(add_metadata)
@@ -478,6 +508,15 @@ def process_VNIR(raw_filepath):
         dst_json_path = os.path.join(out_path, "%s_%s_%s_%s.json" % (int(plot_row), int(plot_col), int(plot_num), timestamp))
         with open(dst_json_path, 'w') as outfile:
             json.dump(dst_json_data, outfile, sort_keys=True, indent=4)
+
+        # generate geojson
+        out_gjson_path = os.path.join(out_path,
+                                     "%s_%s_%s_%s.geojson" % (int(plot_row), int(plot_col), int(plot_num), timestamp))
+
+        bounding_box_to_geographic(x_min, x_max, y_min, y_max, out_gjson_path)
+
+
+
 
 if __name__ == "__main__":
 
@@ -491,7 +530,7 @@ if __name__ == "__main__":
         #"scanDirectionIsPositive": "False",
         os.path.join(raw_root, "VNIR/2019-06-09/2019-06-09__11-58-03-907/8fe14e6b-91a7-4637-aeff-e320e0bf5bff_raw"),
         #"scanDirectionIsPositive": "True"
-        os.path.join(raw_root, "VNIR/2019-06-09/2019-06-09__12-09-03-648/4133fb4e-75ed-49e7-8110-a8f0e7761cec_raw")
+        #os.path.join(raw_root, "VNIR/2019-06-09/2019-06-09__12-09-03-648/4133fb4e-75ed-49e7-8110-a8f0e7761cec_raw")
     ]
 
     for p in input_paths:
