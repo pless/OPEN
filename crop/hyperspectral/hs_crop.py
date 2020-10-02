@@ -219,7 +219,6 @@ def find_crop_position(raw_filepath, cc):
     if left_most_field_range == right_most_field_range:
         plot_ranges = [left_most_field_range]
         plot_ranges_range = [[0, x_map.size - 1]]
-    # TODO: Do I really need and compute all range in the scan (if multiple) hyperspectral should only be one range?
     else:
         print("more than one range in the scan")
         col_plot_num = np.zeros([x_map.size])
@@ -412,11 +411,11 @@ def process_VNIR(raw_filepath):
         for band_ind in range(img_DN.shape[2]):
             # ---- calibrate each band ----
             # use cols for rows and rows for cols because raw data is in reverse
-            #print("reading from orig data cols %s : %s and range %s : %s" % (col_range[0], col_range[1], row_range[0], row_range[1]))
             #calibrated_band = img_DN[col_range[0]:col_range[1], row_range[0]:row_range[1], band_ind] / irrad2DN[:, band_ind]
             calibrated_band = img_DN[col_range[0]:col_range[1], :, band_ind] / irrad2DN[:, band_ind]
             # reorient the data correctly based on the scan direction
             calibrated_band = rotate_band(calibrated_band, scan_dir)
+
             #print("calibrated band size ", calibrated_band.shape)
             # ---- dimensionality reduction ---
             Bslice_bigT = np.transpose(calibrated_band)
@@ -439,20 +438,46 @@ def process_VNIR(raw_filepath):
                 # normalized
                 rgb[:, :, 2] = calibrated_band * 255.0 / calibrated_band.max()
 
-        # ---- processing complete save the relevant output for each plot ----
+        # ---- processing complete save the relevant output for the current plot ----
         print ("saving for plot ", plot_num)
         save_image(rgb, out_path, plot_row, plot_col, plot_num, timestamp)
         # should save UBig S V dataSize maxError MSE
 
         out_h5 = os.path.join(out_path, "%s_%s_%s_%s.h5" % (int(plot_row), int(plot_col), int(plot_num), timestamp))
-        h5f = h5py.File(out_h5, 'a')
-        h5f.create_dataset('UBig', data=UBig)
-        h5f.create_dataset('S', data=Sigma)
-        h5f.create_dataset('Vt', data=Vt)
-        h5f.create_dataset('maxError', data=maxError)
-        h5f.create_dataset('MSE', data=MSE)
+        h5f = h5py.File(out_h5, 'w')
+        h5f.create_dataset('UBig', data=UBig, dtype='<f4')
+        h5f.create_dataset('S', data=Sigma, dtype='<f4')
+        h5f.create_dataset('Vt', data=Vt, dtype='<f4')
+        h5f.create_dataset('maxError', data=maxError, dtype='<f4')
+        h5f.create_dataset('MSE', data=MSE, dtype='<f4')
         h5f.create_dataset('dataSize', data=Bslice_bigT.shape)
         h5f.close()
+
+        # write new json file
+
+        # field coordinates
+
+        y_box_1 = y_map[col_range[0]]
+        y_box_2 = y_map[col_range[1]-1]
+
+        if y_box_1 > y_box_2:
+            add_metadata = {
+                'gwu_added_metadata[m]': {'xmin': float(x_map[0]), 'xmax': float(x_map[-1]), 'ymin': float(y_box_2),
+                                           'ymax': float(y_box_1)}}
+
+        else:
+            add_metadata = {
+                'gwu_added_metadata[m]': {'xmin': float(x_map[0]), 'xmax': float(x_map[-1]), 'ymin': float(y_box_1),
+                                          'ymax': float(y_box_2)}}
+
+
+        # copy all the original json metadata in the plot json along with the plot boundary in field coordinates
+        dst_json_data = dict(img_meta_data)
+        dst_json_data.update(add_metadata)
+
+        dst_json_path = os.path.join(out_path, "%s_%s_%s_%s.json" % (int(plot_row), int(plot_col), int(plot_num), timestamp))
+        with open(dst_json_path, 'w') as outfile:
+            json.dump(dst_json_data, outfile, sort_keys=True, indent=4)
 
 if __name__ == "__main__":
 
@@ -462,8 +487,11 @@ if __name__ == "__main__":
         # "scanDirectionIsPositive": "False" w-e
         #os.path.join(raw_root, "VNIR/2020-02-05/2020-02-05__11-39-58-853/a9dfc10e-b8c2-433e-9066-cd6830ce371f_raw"),
         #"scanDirectionIsPositive": "True" e-w
-        #os.path.join(raw_root, "VNIR/2020-02-06/2020-02-06__12-39-41-588/17c5d1a7-ec83-4872-8fa9-df0b79cd8994_raw")
-        os.path.join(raw_root, "VNIR/2019-06-09/2019-06-09__11-58-03-907/8fe14e6b-91a7-4637-aeff-e320e0bf5bff_raw")
+        #os.path.join(raw_root, "VNIR/2020-02-06/2020-02-06__12-39-41-588/17c5d1a7-ec83-4872-8fa9-df0b79cd8994_raw"),
+        #"scanDirectionIsPositive": "False",
+        os.path.join(raw_root, "VNIR/2019-06-09/2019-06-09__11-58-03-907/8fe14e6b-91a7-4637-aeff-e320e0bf5bff_raw"),
+        #"scanDirectionIsPositive": "True"
+        os.path.join(raw_root, "VNIR/2019-06-09/2019-06-09__12-09-03-648/4133fb4e-75ed-49e7-8110-a8f0e7761cec_raw")
     ]
 
     for p in input_paths:
