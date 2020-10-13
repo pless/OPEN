@@ -3,6 +3,7 @@ import os
 import numpy as np
 import spectral.io.envi as envi
 from PIL import Image
+from netCDF4 import Dataset
 # crop to plot helper lib
 from terra_common import CoordinateConverter as CC
 # libs for ML hs reduction
@@ -22,7 +23,32 @@ raw_root = "/Users/roxana/OPEN/hyperspectral/hs_calib"
 calib_root = "/Users/roxana/OPEN/hyperspectral"
 out_root = "/Users/roxana/OPEN/hyperspectral/hs_calib/test/s9_VNIR_processed"
 env_log = "/Users/roxana/OPEN/hyperspectral/hs_calib"
+# variable to determine the dimensionality reduction of the output calibrated data
+nc_reduction = 10
+# terra common coord converter used by find_crop_position
 cc = CC()
+
+def create_empty_ncdf(out_file, x, y, bands):
+    empty = Dataset(out_file, "w", format="NETCDF4")
+    # add dimensions
+    empty.createDimension("wavelength", bands)
+    empty.createDimension("x", math.ceil(x/nc_reduction))
+    empty.createDimension("y", math.ceil(y/nc_reduction))
+
+    empty.createVariable("rfl_img", "f4", ("wavelength", "x", "y"))
+
+    # add global attributes
+    empty.title = "VNIR plot level calibrated file"
+    empty.created_by = "NCSA & SLU & GWU"
+    empty.history = "created with Python"
+    empty.close()
+
+def update_netcdf_band(out_file, band, band_data):
+    # if band % 10 == 0:
+    #     print("band: %s" % band)
+    #     print('size band_data %s' % band_data.size)
+    with Dataset(out_file, 'a', mmap=False) as src:
+        src["rfl_img"][band, :, :] = band_data[::nc_reduction, ::nc_reduction]
 
 def irradiance_time_extractor(camera_type, envlog_file):
 
@@ -281,14 +307,13 @@ def find_crop_position(raw_filepath):
 
 def process_VNIR(raw_filepath, nc_calib):
 
-
 # this should work for TERRA Season 9 VNIR data
 # For a raw scan file given as a path input raw_filepath the output is:
 #   1. PCA reduction of the calibrate spectra at the plot level data as a h5
 #   2. Plot boundaries in field coordinates (json info),
 #   3. plot image RGB crop, and
 #   4. geojson for each plot?
-#   5. TODO: optional plot level calibrated nc file
+#   5. optional plot level calibrated nc file when nc_calib is true
 
 # ----- Read raw data -----
     # get necessary paths from path to _raw file
@@ -297,7 +322,6 @@ def process_VNIR(raw_filepath, nc_calib):
     md_file = os.path.join(raw_dir, "%s_metadata.json" % raw_file[:-4])
     date = raw_filepath.split("/")[-3]
     timestamp = raw_filepath.split("/")[-2]
-    # TODO CHANGE this for actual full season processing: assumes the EnvironmentLogger under the same directory with the raw data
     envlog_dir = os.path.join(env_log, "EnvironmentLogger/%s" % date)
 
 
@@ -311,11 +335,11 @@ def process_VNIR(raw_filepath, nc_calib):
         # TODO: do we want to change this to be the exact number? data exist in metadata to compute?
         image_scanning_time = 210
     else:
-        print("This file doesn't meet the requirements: VNIR season 9 date range: ", raw_filepath, date )
+        print("This file doesn't meet the requirements: VNIR season 9 date range: ", raw_filepath, date)
         return
 
 
-    print("MODE: ---------- %s ----------" % camera_type)
+    # print("MODE: ---------- %s ----------" % camera_type)
 
     # load the raw data set
     print("Loading %s.hdr" % raw_filepath)
@@ -323,7 +347,6 @@ def process_VNIR(raw_filepath, nc_calib):
         raw = envi.open(raw_filepath + '.hdr')
         # Roxana : this is where the image is loaded
         img_DN = raw.open_memmap()
-        # head_file = envi.read_envi_header(data_fullpath +'.hdr')
     except IOError:
         print('No such file named %s' % raw_filepath)
 
@@ -357,7 +380,7 @@ def process_VNIR(raw_filepath, nc_calib):
     envlog_tot_time = []
     envlog_spectra = np.array([], dtype=np.int64).reshape(0, num_bands_irradiance)
 
-    # TODO: this takes a long time with the purpose of computing the mean spectrum... maybe could be made faster
+    # TODO: this takes a long time with the purpose of computing the mean spectrum... maybe could be made faster?
     for ef in os.listdir(envlog_dir):
         if ef.endswith("environmentlogger.json"):
             time, spectrum = irradiance_time_extractor(camera_type, os.path.join(envlog_dir, ef))
@@ -389,7 +412,7 @@ def process_VNIR(raw_filepath, nc_calib):
 
 # ----- Find the plot crop positions  -----
     crop_positions = {}
-    crop_positions, x_map, y_map = find_crop_position(raw_filepath, cc)
+    crop_positions, x_map, y_map = find_crop_position(raw_filepath)
 
 
 # ----- Hyperspectral compression parameters -----
@@ -436,6 +459,10 @@ def process_VNIR(raw_filepath, nc_calib):
 
         if not os.path.isdir(out_path):
             os.makedirs(out_path)
+        # calibrated plot level ncdf?
+        if nc_calib:
+            out_nc = os.path.join(out_path, "%s.nc" % timestamp)
+            create_empty_ncdf(out_nc, img_DN.shape[1], col_range[1] - col_range[0], img_DN.shape[2])
 
         # apply calibration and PCA at the plot level
         UBig = 0
@@ -446,6 +473,9 @@ def process_VNIR(raw_filepath, nc_calib):
             calibrated_band = img_DN[col_range[0]:col_range[1], :, band_ind] / irrad2DN[:, band_ind]
             # reorient the data correctly based on the scan direction
             calibrated_band = rotate_band(calibrated_band, scan_dir)
+            # save the calibrated band to the nc file
+            if nc_calib:
+                update_netcdf_band(out_nc, band_ind, calibrated_band)
 
             #print("calibrated band size ", calibrated_band.shape)
             # ---- dimensionality reduction ---
@@ -534,4 +564,4 @@ if __name__ == "__main__":
     ]
 
     for p in input_paths:
-        process_VNIR(p, 0)
+        process_VNIR(p, 1)
