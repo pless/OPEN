@@ -20,7 +20,7 @@ import h5py
 # paths:
 raw_root = "/Users/roxana/OPEN/hyperspectral/hs_calib"
 calib_root = "/Users/roxana/OPEN/hyperspectral"
-out_root = "/Users/roxana/OPEN/hyperspectral/hs_calib/test"
+out_root = "/Users/roxana/OPEN/hyperspectral/hs_calib/test/s9_VNIR_processed"
 env_log = "/Users/roxana/OPEN/hyperspectral/hs_calib"
 cc = CC()
 
@@ -224,18 +224,18 @@ def rotate_band(band, scan_dir):
 
     return band
 
-def save_image(rgb, out_path, plot_row, plot_col, plot_num, timestamp):
+def save_image(rgb, out_path, timestamp):
 
     rgb = np.asarray(rgb)
     # somehow the image creation swaps the axis. We want the image and data to be recoded with the same dimensions
     rgb = np.swapaxes(rgb, 0, 1)
     out_img = Image.fromarray(rgb)
     # saving the image as png takes 25x more space no need to do it because imgs are for visualization
-    out_rgb = os.path.join(out_path, "%s_%s_%s_%s.jpg" % (int(plot_row), int(plot_col), int(plot_num), timestamp))
+    out_rgb = os.path.join(out_path, "%s.jpg" % timestamp)
     print("saving image: ", out_rgb)
     out_img.save(out_rgb)
 
-def find_crop_position(raw_filepath, cc):
+def find_crop_position(raw_filepath):
 
     print("Finding plot crop positions")
     x_map, y_map = pixel_to_fieldCoord(raw_filepath)
@@ -299,13 +299,7 @@ def process_VNIR(raw_filepath, nc_calib):
     timestamp = raw_filepath.split("/")[-2]
     # TODO CHANGE this for actual full season processing: assumes the EnvironmentLogger under the same directory with the raw data
     envlog_dir = os.path.join(env_log, "EnvironmentLogger/%s" % date)
-    #     prepare output paths
-    print("Generating output")
 
-    out_path = os.path.join(out_root, date, timestamp)
-    print(out_path)
-    if not os.path.isdir(out_path):
-        os.makedirs(out_path)
 
     # This is for season 9 VNIR
         # season 6 doesn't have any data -- cameras were not functional
@@ -433,9 +427,16 @@ def process_VNIR(raw_filepath, nc_calib):
 
     for (plot_row, plot_col), (row_range, col_range) in crop_positions.items():
         # determine the plot number
-        plot_num = cc.fieldPartition_to_plotNum(plot_row, plot_col)
+        # plot_num = cc.fieldPartition_to_plotNum(plot_row, plot_col)
         # plot level the image array initialization
         rgb = np.zeros((img_DN.shape[1], col_range[1] - col_range[0], 3), dtype=np.uint8)
+
+        # prepare output paths
+        out_path = os.path.join(out_root, "%s_%s" % (int(plot_row), int(plot_col)))
+
+        if not os.path.isdir(out_path):
+            os.makedirs(out_path)
+
         # apply calibration and PCA at the plot level
         UBig = 0
         for band_ind in range(img_DN.shape[2]):
@@ -468,12 +469,13 @@ def process_VNIR(raw_filepath, nc_calib):
                 # normalized
                 rgb[:, :, 2] = calibrated_band * 255.0 / calibrated_band.max()
 
-        # ---- processing complete save the relevant output for the current plot ----
-        print ("saving for plot ", plot_num)
-        save_image(rgb, out_path, plot_row, plot_col, plot_num, timestamp)
-        # should save UBig S V dataSize maxError MSE
 
-        out_h5 = os.path.join(out_path, "%s_%s/%s.h5" % (int(plot_row), int(plot_col), timestamp))
+
+        # ---- processing complete save the relevant output for the current plot ----
+        save_image(rgb, out_path, timestamp)
+
+        # should save UBig S V dataSize maxError MSE
+        out_h5 = os.path.join(out_path, "%s.h5" % timestamp)
         h5f = h5py.File(out_h5, 'w')
         h5f.create_dataset('UBig', data=UBig, dtype='<f4')
         h5f.create_dataset('S', data=Sigma, dtype='<f4')
@@ -504,12 +506,12 @@ def process_VNIR(raw_filepath, nc_calib):
         dst_json_data = dict(img_meta_data)
         dst_json_data.update(add_metadata)
 
-        dst_json_path = os.path.join(out_path, "%s_%s/%s.json" % (int(plot_row), int(plot_col), timestamp))
+        dst_json_path = os.path.join(out_path, "%s.json" % timestamp)
         with open(dst_json_path, 'w') as outfile:
             json.dump(dst_json_data, outfile, sort_keys=True, indent=4)
 
         # generate geojson
-        out_gjson_path = os.path.join(out_path, "%s_%s/%s.geojson" % (int(plot_row), int(plot_col), timestamp))
+        out_gjson_path = os.path.join(out_path, "%s.geojson" % timestamp)
 
         bounding_box_to_geographic(x_min, x_max, y_min, y_max, out_gjson_path)
 
@@ -528,8 +530,8 @@ if __name__ == "__main__":
         #"scanDirectionIsPositive": "False",
         os.path.join(raw_root, "VNIR/2019-06-09/2019-06-09__11-58-03-907/8fe14e6b-91a7-4637-aeff-e320e0bf5bff_raw"),
         #"scanDirectionIsPositive": "True"
-        #os.path.join(raw_root, "VNIR/2019-06-09/2019-06-09__12-09-03-648/4133fb4e-75ed-49e7-8110-a8f0e7761cec_raw")
+        # os.path.join(raw_root, "VNIR/2019-06-09/2019-06-09__12-09-03-648/4133fb4e-75ed-49e7-8110-a8f0e7761cec_raw")
     ]
 
     for p in input_paths:
-        process_VNIR(p)
+        process_VNIR(p, 0)
